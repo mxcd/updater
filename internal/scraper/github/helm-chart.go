@@ -15,6 +15,126 @@ import (
 func scrapeHelmChart(provider *configuration.PackageSourceProvider, source *configuration.PackageSource, opts *ScrapeOptions) ([]*configuration.PackageSourceVersion, error) {
 	log.Debug().Str("uri", source.URI).Msg("scraping GitHub Helm chart")
 
+	var body []byte
+	var err error
+
+	// Check if URI is a raw.githubusercontent.com URL
+	if isRawGitHubURL(source.URI) {
+		log.Debug().Str("uri", source.URI).Msg("detected raw.githubusercontent.com URL, fetching directly")
+		body, err = fetchFromRawURL(source.URI, provider)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// Use GitHub API for regular repository URLs
+		body, err = fetchViaGitHubAPI(provider, source)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Parse the YAML content
+	var chartData struct {
+		Version     string `yaml:"version"`
+		AppVersion  string `yaml:"appVersion"`
+		Name        string `yaml:"name"`
+		Description string `yaml:"description"`
+	}
+
+	if err := yaml.Unmarshal(body, &chartData); err != nil {
+		return nil, fmt.Errorf("failed to parse Chart.yaml: %w", err)
+	}
+
+	if chartData.Version == "" {
+		return nil, fmt.Errorf("no version found in Chart.yaml")
+	}
+
+	// Parse version into major, minor, patch components
+	version := &configuration.PackageSourceVersion{
+		Version: chartData.Version,
+	}
+
+	// Try to parse semantic version (e.g., "1.2.3" or "v1.2.3")
+	versionString := strings.TrimPrefix(chartData.Version, "v")
+	parts := strings.Split(versionString, ".")
+
+	if len(parts) >= 1 {
+		if major, err := strconv.Atoi(parts[0]); err == nil {
+			version.MajorVersion = major
+		}
+	}
+	if len(parts) >= 2 {
+		if minor, err := strconv.Atoi(parts[1]); err == nil {
+			version.MinorVersion = minor
+		}
+	}
+	if len(parts) >= 3 {
+		// Handle patch versions that might have additional suffixes (e.g., "3-beta1")
+		patchPart := strings.Split(parts[2], "-")[0]
+		if patch, err := strconv.Atoi(patchPart); err == nil {
+			version.PatchVersion = patch
+		}
+	}
+
+	// Add version information if appVersion is available
+	if chartData.AppVersion != "" {
+		version.VersionInformation = fmt.Sprintf("appVersion: %s", chartData.AppVersion)
+	}
+
+	log.Debug().
+		Str("version", version.Version).
+		Int("major", version.MajorVersion).
+		Int("minor", version.MinorVersion).
+		Int("patch", version.PatchVersion).
+		Msg("scraped Helm chart version")
+
+	return []*configuration.PackageSourceVersion{version}, nil
+}
+// isRawGitHubURL checks if the URI is a raw.githubusercontent.com URL
+func isRawGitHubURL(uri string) bool {
+	return strings.Contains(uri, "raw.githubusercontent.com")
+}
+
+// fetchFromRawURL fetches Chart.yaml content directly from raw.githubusercontent.com URL
+func fetchFromRawURL(uri string, provider *configuration.PackageSourceProvider) ([]byte, error) {
+	log.Debug().Str("uri", uri).Msg("fetching from raw URL (bypassing GitHub API)")
+
+	// Create HTTP request
+	request, err := http.NewRequest("GET", uri, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Add authentication if configured (raw URLs also support authentication)
+	if provider.AuthType == configuration.PackageSourceProviderAuthTypeToken && provider.Token != "" {
+		request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", provider.Token))
+	} else if provider.AuthType == configuration.PackageSourceProviderAuthTypeBasic && provider.Username != "" {
+		request.SetBasicAuth(provider.Username, provider.Password)
+	}
+
+	// Execute request
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Chart.yaml from raw URL: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch Chart.yaml from raw URL: HTTP %d", response.StatusCode)
+	}
+
+	// Read the response body
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read Chart.yaml from raw URL: %w", err)
+	}
+
+	return body, nil
+}
+
+// fetchViaGitHubAPI fetches Chart.yaml content via GitHub API
+func fetchViaGitHubAPI(provider *configuration.PackageSourceProvider, source *configuration.PackageSource) ([]byte, error) {
 	// Parse repository information from URI
 	repoInfo, err := ParseRepositoryURL(source.URI)
 	if err != nil {
@@ -89,63 +209,9 @@ func scrapeHelmChart(provider *configuration.PackageSourceProvider, source *conf
 		return nil, fmt.Errorf("failed to read Chart.yaml: %w", err)
 	}
 
-	// Parse the YAML content
-	var chartData struct {
-		Version     string `yaml:"version"`
-		AppVersion  string `yaml:"appVersion"`
-		Name        string `yaml:"name"`
-		Description string `yaml:"description"`
-	}
-
-	if err := yaml.Unmarshal(body, &chartData); err != nil {
-		return nil, fmt.Errorf("failed to parse Chart.yaml: %w", err)
-	}
-
-	if chartData.Version == "" {
-		return nil, fmt.Errorf("no version found in Chart.yaml")
-	}
-
-	// Parse version into major, minor, patch components
-	version := &configuration.PackageSourceVersion{
-		Version: chartData.Version,
-	}
-
-	// Try to parse semantic version (e.g., "1.2.3" or "v1.2.3")
-	versionString := strings.TrimPrefix(chartData.Version, "v")
-	parts := strings.Split(versionString, ".")
-
-	if len(parts) >= 1 {
-		if major, err := strconv.Atoi(parts[0]); err == nil {
-			version.MajorVersion = major
-		}
-	}
-	if len(parts) >= 2 {
-		if minor, err := strconv.Atoi(parts[1]); err == nil {
-			version.MinorVersion = minor
-		}
-	}
-	if len(parts) >= 3 {
-		// Handle patch versions that might have additional suffixes (e.g., "3-beta1")
-		patchPart := strings.Split(parts[2], "-")[0]
-		if patch, err := strconv.Atoi(patchPart); err == nil {
-			version.PatchVersion = patch
-		}
-	}
-
-	// Add version information if appVersion is available
-	if chartData.AppVersion != "" {
-		version.VersionInformation = fmt.Sprintf("appVersion: %s", chartData.AppVersion)
-	}
-
-	log.Debug().
-		Str("version", version.Version).
-		Int("major", version.MajorVersion).
-		Int("minor", version.MinorVersion).
-		Int("patch", version.PatchVersion).
-		Msg("scraped Helm chart version")
-
-	return []*configuration.PackageSourceVersion{version}, nil
+	return body, nil
 }
+
 
 // extractPathFromRawURL attempts to extract the file path from old-style GitHub raw content URLs
 // Example: https://raw.githubusercontent.com/owner/repo/refs/heads/main/path/to/Chart.yaml

@@ -134,6 +134,13 @@ func TestParseRepositoryURL(t *testing.T) {
 			wantErr:     true,
 			errContains: "owner or repo is empty",
 		},
+		{
+			name:      "raw.githubusercontent.com URL",
+			uri:       "https://raw.githubusercontent.com/traefik/traefik-helm-chart/refs/heads/master/traefik/Chart.yaml",
+			wantOwner: "traefik",
+			wantRepo:  "traefik-helm-chart",
+			wantErr:   false,
+		},
 	}
 
 	for _, tt := range tests {
