@@ -8,6 +8,7 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/joho/godotenv"
+	"github.com/mxcd/updater/internal/compare"
 	"github.com/mxcd/updater/internal/configuration"
 	"github.com/mxcd/updater/internal/scraper"
 	"github.com/mxcd/updater/internal/util"
@@ -95,6 +96,35 @@ func main() {
 					},
 				},
 				Action: loadCommand,
+			},
+			{
+				Name:  "compare",
+				Usage: "Compare current versions in targets with latest available versions",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "config",
+						Aliases: []string{"c"},
+						Usage:   "Path to configuration file",
+						Value:   ".updaterconfig.yml",
+						Sources: cli.EnvVars("UPDATER_CONFIG"),
+					},
+					&cli.StringFlag{
+						Name:  "output",
+						Usage: "Output format: table, json, yaml",
+						Value: "table",
+					},
+					&cli.IntFlag{
+						Name:  "limit",
+						Usage: "Maximum number of versions to retrieve per source",
+						Value: 10,
+					},
+					&cli.StringFlag{
+						Name:  "only",
+						Usage: "Only show specific update types: major, minor, patch, all",
+						Value: "all",
+					},
+				},
+				Action: compareCommand,
 			},
 		},
 	}
@@ -392,6 +422,209 @@ func outputLoadResultsJSON(config *configuration.Config) error {
 func outputLoadResultsYAML(config *configuration.Config) error {
 	output := map[string]interface{}{
 		"packageSources": config.PackageSources,
+	}
+	encoder := yaml.NewEncoder(os.Stdout)
+	encoder.SetIndent(2)
+	return encoder.Encode(output)
+}
+
+func compareCommand(ctx context.Context, cmd *cli.Command) error {
+	configPath := cmd.String("config")
+	outputFormat := cmd.String("output")
+	limit := cmd.Int("limit")
+	only := cmd.String("only")
+
+	log.Info().Str("config", configPath).Msg("Loading configuration...")
+
+	// Load configuration
+	config, err := configuration.LoadConfiguration(configPath)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to load configuration")
+		return cli.Exit(fmt.Sprintf("Configuration load error: %v", err), 3)
+	}
+
+	log.Debug().Msg("Configuration loaded successfully")
+
+	// Validate configuration
+	validationResult := configuration.ValidateConfiguration(config)
+	if !validationResult.Valid {
+		log.Error().Msg("Configuration validation failed")
+		for _, validationErr := range validationResult.Errors {
+			log.Error().Str("field", validationErr.Field).Msg(validationErr.Message)
+		}
+		return cli.Exit("Configuration validation failed", 3)
+	}
+
+	log.Info().Msg("Configuration is valid")
+
+	// Create orchestrator and scrape sources
+	orchestrator, err := scraper.NewOrchestrator(config)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to create scraper orchestrator")
+		return cli.Exit(fmt.Sprintf("Orchestrator creation error: %v", err), 1)
+	}
+
+	log.Debug().Msg("Scraper orchestrator created successfully")
+
+	// Scrape all sources
+	scrapeOptions := &scraper.ScrapeOptions{
+		Limit: limit,
+	}
+
+	if err := orchestrator.ScrapeAllSources(scrapeOptions); err != nil {
+		log.Error().Err(err).Msg("Failed to scrape package sources")
+		return cli.Exit(fmt.Sprintf("Scraping error: %v", err), 1)
+	}
+
+	log.Info().Msg("Successfully scraped all package sources")
+
+	// Create comparison engine
+	compareEngine := compare.NewCompareEngine(orchestrator.GetConfig())
+
+	// Perform comparison
+	results, err := compareEngine.CompareAll()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to compare targets")
+		return cli.Exit(fmt.Sprintf("Comparison error: %v", err), 1)
+	}
+
+	// Filter results based on 'only' flag
+	filteredResults := filterComparisonResults(results, only)
+
+	// Output results
+	if err := outputComparisonResults(filteredResults, outputFormat); err != nil {
+		log.Error().Err(err).Msg("Failed to output comparison results")
+		return cli.Exit(fmt.Sprintf("Output error: %v", err), 1)
+	}
+
+	// Exit with code 1 if there are pending updates (for CI gating)
+	hasUpdates := false
+	for _, result := range filteredResults {
+		if result.NeedsUpdate {
+			hasUpdates = true
+			break
+		}
+	}
+
+	if hasUpdates {
+		log.Info().Msg("Updates are available")
+		return cli.Exit("", 1)
+	}
+
+	log.Info().Msg("All targets are up to date")
+	return nil
+}
+
+func filterComparisonResults(results []*compare.ComparisonResult, only string) []*compare.ComparisonResult {
+	if only == "all" {
+		return results
+	}
+
+	filtered := make([]*compare.ComparisonResult, 0)
+	for _, result := range results {
+		switch only {
+		case "major":
+			if result.UpdateType == compare.UpdateTypeMajor {
+				filtered = append(filtered, result)
+			}
+		case "minor":
+			if result.UpdateType == compare.UpdateTypeMinor {
+				filtered = append(filtered, result)
+			}
+		case "patch":
+			if result.UpdateType == compare.UpdateTypePatch {
+				filtered = append(filtered, result)
+			}
+		}
+	}
+	return filtered
+}
+
+func outputComparisonResults(results []*compare.ComparisonResult, format string) error {
+	switch format {
+	case "table":
+		return outputComparisonTable(results)
+	case "json":
+		return outputComparisonJSON(results)
+	case "yaml":
+		return outputComparisonYAML(results)
+	default:
+		return fmt.Errorf("unsupported output format: %s", format)
+	}
+}
+
+func outputComparisonTable(results []*compare.ComparisonResult) error {
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.SetTitle("🔍 Version Comparison")
+	t.AppendHeader(table.Row{"Target", "Source", "Current", "Latest", "Update Type", "Status"})
+
+	for _, result := range results {
+		if result.Error != nil {
+			t.AppendRow(table.Row{
+				result.TargetName,
+				result.SourceName,
+				"-",
+				"-",
+				"-",
+				fmt.Sprintf("❌ Error: %v", result.Error),
+			})
+		} else {
+			status := "✅ Up to date"
+			if result.NeedsUpdate {
+				status = fmt.Sprintf("🔄 Update available (%s)", result.UpdateType)
+			}
+
+			t.AppendRow(table.Row{
+				result.TargetName,
+				result.SourceName,
+				result.CurrentVersion,
+				result.LatestVersion,
+				result.UpdateType,
+				status,
+			})
+		}
+	}
+
+	t.SetStyle(table.StyleRounded)
+	t.Render()
+	fmt.Println()
+
+	// Summary
+	updatesCount := 0
+	errorsCount := 0
+	for _, r := range results {
+		if r.Error != nil {
+			errorsCount++
+		} else if r.NeedsUpdate {
+			updatesCount++
+		}
+	}
+
+	if errorsCount > 0 {
+		fmt.Printf("⚠️  %d target(s) with errors\n", errorsCount)
+	}
+	if updatesCount > 0 {
+		fmt.Printf("🔄 %d target(s) need updating\n", updatesCount)
+	} else {
+		fmt.Println("✅ All targets are up to date")
+	}
+
+	return nil
+}
+
+func outputComparisonJSON(results []*compare.ComparisonResult) error {
+	output := map[string]interface{}{
+		"results": results,
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(output)
+}
+
+func outputComparisonYAML(results []*compare.ComparisonResult) error {
+	output := map[string]interface{}{
+		"results": results,
 	}
 	encoder := yaml.NewEncoder(os.Stdout)
 	encoder.SetIndent(2)

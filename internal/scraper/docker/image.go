@@ -67,7 +67,7 @@ func scrapeDockerImage(provider *configuration.PackageSourceProvider, source *co
 		versions = versions[:opts.Limit]
 	}
 
-	log.Info().
+	log.Debug().
 		Int("count", len(versions)).
 		Int("total_fetched", len(tags)).
 		Int("after_filtering", len(filteredVersions)).
@@ -129,13 +129,13 @@ func fetchDockerHubTagsPaginated(imageInfo *ImageInfo, provider *configuration.P
 	nextURL := fmt.Sprintf("https://registry.hub.docker.com/v2/repositories/%s/tags?page_size=%d", imageInfo.Repository, pageSize)
 
 	client := &http.Client{}
-	
+
 	// Determine tag limit (default to 0 = unlimited)
 	tagLimit := source.TagLimit
 	if tagLimit < 0 {
 		tagLimit = 0 // Normalize negative values to unlimited
 	}
-	
+
 	pageCount := 0
 
 	for nextURL != "" {
@@ -147,13 +147,13 @@ func fetchDockerHubTagsPaginated(imageInfo *ImageInfo, provider *configuration.P
 				Msg("reached tag limit, stopping pagination")
 			break
 		}
-		
+
 		pageCount++
 		log.Trace().
 			Str("url", nextURL).
 			Int("page", pageCount).
 			Msg("fetching Docker Hub tags page")
-			
+
 		request, err := http.NewRequest("GET", nextURL, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create request: %w", err)
@@ -205,7 +205,7 @@ func fetchDockerHubTagsPaginated(imageInfo *ImageInfo, provider *configuration.P
 
 		// Use the Next URL from the response, or stop if there isn't one
 		nextURL = pageResponse.Next
-		
+
 		log.Trace().
 			Int("page", pageCount).
 			Int("page_tags", len(pageResponse.Results)).
@@ -247,7 +247,7 @@ func filterVersions(versions []*configuration.PackageSourceVersion, source *conf
 
 	for _, version := range versions {
 		tag := version.Version
-		
+
 		// Apply tag pattern if specified
 		if source.TagPattern != "" {
 			matched, err := regexp.MatchString(source.TagPattern, tag)

@@ -65,7 +65,7 @@ func scrapeTag(provider *configuration.PackageSourceProvider, source *configurat
 		versions = versions[:opts.Limit]
 	}
 
-	log.Info().
+	log.Debug().
 		Int("count", len(versions)).
 		Int("total_fetched", len(tags)).
 		Int("after_filtering", len(filteredVersions)).
@@ -88,7 +88,7 @@ func fetchAllGitHubTags(apiBaseURL string, repoInfo *RepositoryInfo, provider *c
 	allTags := make([]GitHubTag, 0)
 	perPage := 100
 	page := 1
-	
+
 	// Determine tag limit (default to 0 = unlimited)
 	tagLimit := source.TagLimit
 	if tagLimit < 0 {

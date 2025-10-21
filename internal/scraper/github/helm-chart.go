@@ -113,7 +113,7 @@ func scrapeHelmChart(provider *configuration.PackageSourceProvider, source *conf
 	// Try to parse semantic version (e.g., "1.2.3" or "v1.2.3")
 	versionString := strings.TrimPrefix(chartData.Version, "v")
 	parts := strings.Split(versionString, ".")
-	
+
 	if len(parts) >= 1 {
 		if major, err := strconv.Atoi(parts[0]); err == nil {
 			version.MajorVersion = major
@@ -137,7 +137,7 @@ func scrapeHelmChart(provider *configuration.PackageSourceProvider, source *conf
 		version.VersionInformation = fmt.Sprintf("appVersion: %s", chartData.AppVersion)
 	}
 
-	log.Info().
+	log.Debug().
 		Str("version", version.Version).
 		Int("major", version.MajorVersion).
 		Int("minor", version.MinorVersion).
@@ -146,6 +146,7 @@ func scrapeHelmChart(provider *configuration.PackageSourceProvider, source *conf
 
 	return []*configuration.PackageSourceVersion{version}, nil
 }
+
 // extractPathFromRawURL attempts to extract the file path from old-style GitHub raw content URLs
 // Example: https://raw.githubusercontent.com/owner/repo/refs/heads/main/path/to/Chart.yaml
 // or: https://raw.git.example.com/owner/repo/refs/heads/main/path/to/Chart.yaml

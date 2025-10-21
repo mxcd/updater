@@ -5,6 +5,8 @@ import (
 
 	"github.com/mxcd/updater/internal/configuration"
 	"github.com/rs/zerolog/log"
+
+	"github.com/schollz/progressbar/v3"
 )
 
 type Orchestrator struct {
@@ -44,7 +46,24 @@ func (orchestrator *Orchestrator) createProviderClient(provider *configuration.P
 func (orchestrator *Orchestrator) ScrapeAllSources(options *ScrapeOptions) error {
 	log.Info().Int("count", len(orchestrator.config.PackageSources)).Msg("Starting to scrape all package sources")
 
+	bar := progressbar.NewOptions(len(orchestrator.config.PackageSources),
+		progressbar.OptionSetDescription("Scraping package sources:"),
+		progressbar.OptionSetItsString("pkg"),
+		progressbar.OptionShowIts(),
+		progressbar.OptionShowCount(),
+		progressbar.OptionSetWidth(40),
+		progressbar.OptionEnableColorCodes(true),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "[green]=[reset]",
+			SaucerHead:    "[green]>[reset]",
+			SaucerPadding: " ",
+			BarStart:      "[",
+			BarEnd:        "]",
+		}),
+	)
+
 	for _, source := range orchestrator.config.PackageSources {
+		bar.Add(1)
 		if err := orchestrator.scrapeSource(source, options); err != nil {
 			log.Error().
 				Err(err).
@@ -55,12 +74,15 @@ func (orchestrator *Orchestrator) ScrapeAllSources(options *ScrapeOptions) error
 		}
 	}
 
+	bar.Finish()
+	fmt.Printf("\n")
+
 	log.Info().Msg("Successfully scraped all package sources")
 	return nil
 }
 
 func (orchestrator *Orchestrator) scrapeSource(source *configuration.PackageSource, options *ScrapeOptions) error {
-	log.Info().
+	log.Debug().
 		Str("source", source.Name).
 		Str("provider", source.Provider).
 		Str("type", string(source.Type)).
@@ -82,7 +104,7 @@ func (orchestrator *Orchestrator) scrapeSource(source *configuration.PackageSour
 	// Store versions in the source
 	source.Versions = versions
 
-	log.Info().
+	log.Debug().
 		Str("source", source.Name).
 		Int("versions", len(versions)).
 		Msg("Successfully scraped package source")

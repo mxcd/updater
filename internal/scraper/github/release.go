@@ -89,7 +89,7 @@ func scrapeRelease(provider *configuration.PackageSourceProvider, source *config
 	// Try to parse semantic version (e.g., "v1.2.3" or "1.2.3")
 	versionString := strings.TrimPrefix(releaseData.TagName, "v")
 	versionParts := strings.Split(versionString, ".")
-	
+
 	if len(versionParts) >= 1 {
 		if major, err := strconv.Atoi(versionParts[0]); err == nil {
 			version.MajorVersion = major
@@ -123,7 +123,7 @@ func scrapeRelease(provider *configuration.PackageSourceProvider, source *config
 		version.VersionInformation = strings.Join(infoItems, ", ")
 	}
 
-	log.Info().
+	log.Debug().
 		Str("version", version.Version).
 		Int("major", version.MajorVersion).
 		Int("minor", version.MinorVersion).

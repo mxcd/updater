@@ -80,12 +80,18 @@ func ValidateConfiguration(config *Config) *ValidationResult {
 	}
 
 	// Validate package sources
+	sourceNames := make(map[string]bool)
 	for i, source := range config.PackageSources {
 		fieldPrefix := fmt.Sprintf("packageSources[%d]", i)
 
 		// Validate name
 		if strings.TrimSpace(source.Name) == "" {
 			result.AddError(fmt.Sprintf("%s.name", fieldPrefix), "source name cannot be empty")
+		} else {
+			if sourceNames[source.Name] {
+				result.AddError(fmt.Sprintf("%s.name", fieldPrefix), fmt.Sprintf("duplicate source name: %s", source.Name))
+			}
+			sourceNames[source.Name] = true
 		}
 
 		// Validate provider reference
@@ -103,6 +109,41 @@ func ValidateConfiguration(config *Config) *ValidationResult {
 		// Validate URI
 		if strings.TrimSpace(source.URI) == "" {
 			result.AddError(fmt.Sprintf("%s.uri", fieldPrefix), "URI cannot be empty")
+		}
+	}
+
+	// Validate targets
+	for i, target := range config.Targets {
+		fieldPrefix := fmt.Sprintf("targets[%d]", i)
+
+		// Validate name
+		if strings.TrimSpace(target.Name) == "" {
+			result.AddError(fmt.Sprintf("%s.name", fieldPrefix), "target name cannot be empty")
+		}
+
+		// Validate type
+		if !isValidTargetType(target.Type) {
+			result.AddError(fmt.Sprintf("%s.type", fieldPrefix), fmt.Sprintf("invalid target type: %s", target.Type))
+		}
+
+		// Validate file
+		if strings.TrimSpace(target.File) == "" {
+			result.AddError(fmt.Sprintf("%s.file", fieldPrefix), "file path cannot be empty")
+		}
+
+		// Validate source reference
+		if strings.TrimSpace(target.Source) == "" {
+			result.AddError(fmt.Sprintf("%s.source", fieldPrefix), "source reference cannot be empty")
+		} else if !sourceNames[target.Source] {
+			result.AddError(fmt.Sprintf("%s.source", fieldPrefix), fmt.Sprintf("source '%s' not found in packageSources", target.Source))
+		}
+
+		// Type-specific validation
+		switch target.Type {
+		case TargetTypeTerraformVariable:
+			if strings.TrimSpace(target.TerraformVariableName) == "" {
+				result.AddError(fmt.Sprintf("%s.terraformVariableName", fieldPrefix), "terraformVariableName is required for terraform-variable target")
+			}
 		}
 	}
 
@@ -140,6 +181,16 @@ func isValidSourceType(sourceType PackageSourceType) bool {
 		PackageSourceTypeGitTag,
 		PackageSourceTypeGitHelmChart,
 		PackageSourceTypeDockerImage:
+		return true
+	default:
+		return false
+	}
+}
+
+// isValidTargetType checks if the target type is valid
+func isValidTargetType(targetType TargetType) bool {
+	switch targetType {
+	case TargetTypeTerraformVariable:
 		return true
 	default:
 		return false

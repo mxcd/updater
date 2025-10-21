@@ -3,6 +3,7 @@ package configuration
 type Config struct {
 	PackageSourceProviders []*PackageSourceProvider `yaml:"packageSourceProviders"`
 	PackageSources         []*PackageSource         `yaml:"packageSources"`
+	Targets                []*Target                `yaml:"targets"`
 }
 
 type PackageSourceType string
@@ -19,13 +20,13 @@ type PackageSource struct {
 	Provider          string                  `yaml:"provider"`
 	Type              PackageSourceType       `yaml:"type"`
 	URI               string                  `yaml:"uri"`
-	Branch            string                  `yaml:"branch,omitempty"`            // Git branch (for git-helm-chart), defaults to "main"
-	Path              string                  `yaml:"path,omitempty"`              // File path in repository (for git-helm-chart)
+	Branch            string                  `yaml:"branch,omitempty"` // Git branch (for git-helm-chart), defaults to "main"
+	Path              string                  `yaml:"path,omitempty"`   // File path in repository (for git-helm-chart)
 	VersionConstraint string                  `yaml:"versionConstraint,omitempty"`
-	TagPattern        string                  `yaml:"tagPattern,omitempty"`        // Regex to match desired tags
-	ExcludePattern    string                  `yaml:"excludePattern,omitempty"`    // Regex to exclude unwanted tags
-	TagLimit          int                     `yaml:"tagLimit,omitempty"`          // Maximum number of tags to fetch from registry (before filtering)
-	SortBy            string                  `yaml:"sortBy,omitempty"`            // How to sort: "semantic", "date", "alphabetical"
+	TagPattern        string                  `yaml:"tagPattern,omitempty"`     // Regex to match desired tags
+	ExcludePattern    string                  `yaml:"excludePattern,omitempty"` // Regex to exclude unwanted tags
+	TagLimit          int                     `yaml:"tagLimit,omitempty"`       // Maximum number of tags to fetch from registry (before filtering)
+	SortBy            string                  `yaml:"sortBy,omitempty"`         // How to sort: "semantic", "date", "alphabetical"
 	Versions          []*PackageSourceVersion `yaml:"versions,omitempty"`
 }
 
@@ -61,4 +62,18 @@ type PackageSourceProvider struct {
 	Username string                        `yaml:"username,omitempty"`
 	Password string                        `yaml:"password,omitempty"`
 	Token    string                        `yaml:"token,omitempty"`
+}
+
+type TargetType string
+
+const (
+	TargetTypeTerraformVariable TargetType = "terraform-variable"
+)
+
+type Target struct {
+	Name                  string     `yaml:"name"`
+	Type                  TargetType `yaml:"type"`
+	File                  string     `yaml:"file"`
+	TerraformVariableName string     `yaml:"terraformVariableName,omitempty"`
+	Source                string     `yaml:"source"`
 }
