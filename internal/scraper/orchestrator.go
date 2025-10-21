@@ -44,7 +44,7 @@ func (orchestrator *Orchestrator) createProviderClient(provider *configuration.P
 }
 
 func (orchestrator *Orchestrator) ScrapeAllSources(options *ScrapeOptions) error {
-	log.Info().Int("count", len(orchestrator.config.PackageSources)).Msg("Starting to scrape all package sources")
+	log.Debug().Int("count", len(orchestrator.config.PackageSources)).Msg("Starting to scrape all package sources")
 
 	bar := progressbar.NewOptions(len(orchestrator.config.PackageSources),
 		progressbar.OptionSetDescription("Scraping package sources:"),
@@ -77,7 +77,7 @@ func (orchestrator *Orchestrator) ScrapeAllSources(options *ScrapeOptions) error
 	bar.Finish()
 	fmt.Printf("\n")
 
-	log.Info().Msg("Successfully scraped all package sources")
+	log.Debug().Msg("Successfully scraped all package sources")
 	return nil
 }
 

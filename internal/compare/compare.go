@@ -48,7 +48,7 @@ func NewCompareEngine(config *configuration.Config) *CompareEngine {
 
 // CompareAll compares all configured targets with their sources
 func (e *CompareEngine) CompareAll() ([]*ComparisonResult, error) {
-	log.Info().Msg("Starting comparison of all targets")
+	log.Debug().Msg("Starting comparison of all targets")
 
 	results := make([]*ComparisonResult, 0)
 
@@ -60,7 +60,7 @@ func (e *CompareEngine) CompareAll() ([]*ComparisonResult, error) {
 		}
 	}
 
-	log.Info().
+	log.Debug().
 		Int("total", len(results)).
 		Int("needsUpdate", countNeedingUpdate(results)).
 		Msg("Comparison complete")
@@ -165,7 +165,7 @@ func (e *CompareEngine) compareTargetUpdateItem(targetConfig *configuration.Targ
 		}
 
 		result.UpdateType = determineUpdateType(currentSemVer, latestVersion)
-		log.Info().
+		log.Debug().
 			Str("target", targetConfig.Name).
 			Str("current", currentVersion).
 			Str("latest", latestVersion.Version).

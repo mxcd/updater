@@ -26,7 +26,7 @@ type CompareResult struct {
 }
 
 func Compare(options *CompareOptions) (*CompareResult, error) {
-	log.Info().Str("config", options.ConfigPath).Msg("Loading configuration...")
+	log.Debug().Str("config", options.ConfigPath).Msg("Loading configuration...")
 
 	// Load configuration
 	config, err := configuration.LoadConfiguration(options.ConfigPath)
@@ -68,7 +68,7 @@ func Compare(options *CompareOptions) (*CompareResult, error) {
 		return nil, fmt.Errorf("scraping error: %w", err)
 	}
 
-	log.Info().Msg("Successfully scraped all package sources")
+	log.Debug().Msg("Successfully scraped all package sources")
 
 	// Create comparison engine
 	compareEngine := compare.NewCompareEngine(orchestrator.GetConfig())

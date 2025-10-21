@@ -71,14 +71,18 @@ const (
 )
 
 type Target struct {
-	Name  string       `yaml:"name"`
-	Type  TargetType   `yaml:"type"`
-	File  string       `yaml:"file"`
-	Items []TargetItem `yaml:"items"`
+	Name       string       `yaml:"name"`
+	Type       TargetType   `yaml:"type"`
+	File       string       `yaml:"file"`
+	Items      []TargetItem `yaml:"items"`
+	PatchGroup string       `yaml:"patchGroup,omitempty"`
+	Labels     []string     `yaml:"labels,omitempty"`
 }
 
 type TargetItem struct {
-	Name                  string `yaml:"name,omitempty"`
-	TerraformVariableName string `yaml:"terraformVariableName,omitempty"`
-	Source                string `yaml:"source"`
+	Name                  string   `yaml:"name,omitempty"`
+	TerraformVariableName string   `yaml:"terraformVariableName,omitempty"`
+	Source                string   `yaml:"source"`
+	PatchGroup            string   `yaml:"patchGroup,omitempty"`
+	Labels                []string `yaml:"labels,omitempty"`
 }

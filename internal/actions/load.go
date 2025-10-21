@@ -19,7 +19,7 @@ type LoadOptions struct {
 }
 
 func Load(options *LoadOptions) error {
-	log.Info().Str("config", options.ConfigPath).Msg("Loading configuration...")
+	log.Debug().Str("config", options.ConfigPath).Msg("Loading configuration...")
 
 	// Load configuration
 	config, err := configuration.LoadConfiguration(options.ConfigPath)

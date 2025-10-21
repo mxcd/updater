@@ -89,7 +89,7 @@ func (t *TerraformVariableTarget) ReadCurrentVersion() (string, error) {
 	}
 
 	version := matches[1]
-	log.Info().
+	log.Debug().
 		Str("file", t.config.File).
 		Str("variable", t.updateItem.TerraformVariableName).
 		Str("version", version).

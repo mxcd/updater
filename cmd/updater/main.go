@@ -120,6 +120,36 @@ func main() {
 				},
 				Action: compareCommand,
 			},
+			{
+				Name:  "apply",
+				Usage: "Apply updates by creating commits and pull requests",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "config",
+						Aliases: []string{"c"},
+						Usage:   "Path to configuration file",
+						Value:   ".updaterconfig.yml",
+						Sources: cli.EnvVars("UPDATER_CONFIG"),
+					},
+					&cli.BoolFlag{
+						Name:    "dry-run",
+						Aliases: []string{"d"},
+						Usage:   "Show what would be done without making changes",
+						Value:   false,
+					},
+					&cli.IntFlag{
+						Name:  "limit",
+						Usage: "Maximum number of versions to retrieve per source",
+						Value: 10,
+					},
+					&cli.StringFlag{
+						Name:  "only",
+						Usage: "Only apply specific update types: major, minor, patch, all",
+						Value: "all",
+					},
+				},
+				Action: applyCommand,
+			},
 		},
 	}
 
@@ -183,6 +213,21 @@ func compareCommand(ctx context.Context, cmd *cli.Command) error {
 	// Exit with code 1 if there are pending updates (for CI gating)
 	if result.HasUpdates {
 		return cli.Exit("", 1)
+	}
+
+	return nil
+}
+
+func applyCommand(ctx context.Context, cmd *cli.Command) error {
+	options := &actions.ApplyOptions{
+		ConfigPath: cmd.String("config"),
+		DryRun:     cmd.Bool("dry-run"),
+		Limit:      cmd.Int("limit"),
+		Only:       cmd.String("only"),
+	}
+
+	if err := actions.Apply(options); err != nil {
+		return cli.Exit(err.Error(), 1)
 	}
 
 	return nil
