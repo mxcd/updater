@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  GO_VERSION: 1.24.5
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@master
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install dependencies
+        run: go mod download
+      - name: Run tests
+        run: go test ./...
+  release:
+    name: Create release
+    runs-on: [ubuntu-latest]
+    steps:
+      - name: Changelog
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: scottbrenner/generate-changelog-action@master
+        id: changelog
+        env:
+          REPO: ${{ github.repository }}
+      - name: Create release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          body: |
+            ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: false
+
+  client:
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        os: [linux, windows, darwin]
+        include:
+          - os: linux
+            artifact_suffix: ""
+          - os: windows
+            artifact_suffix: ".exe"
+    runs-on: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@master
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: golang build
+        env:
+          GOARCH: ${{ matrix.arch }}
+          GOOS: ${{ matrix.os }}
+        run: go build -ldflags="-s -w -X 'main.version=${{ github.ref_name }}'" -o updater cmd/updater/main.go
+      - name: Upload binaries to release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ${{ github.workspace }}/updater
+          asset_name: updater_${{ matrix.os }}_${{ matrix.arch }}${{ matrix.artifact_suffix }}
+          tag: ${{ github.ref }}
