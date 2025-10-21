@@ -13,17 +13,29 @@ import (
 // TerraformVariableTarget implements the TargetClient interface for Terraform variable files
 type TerraformVariableTarget struct {
 	config       *configuration.Target
+	updateItem   *configuration.TargetItem
 	fileContents string
 }
 
-// NewTerraformVariableTarget creates a new terraform variable target
+// NewTerraformVariableTarget creates a new terraform variable target (deprecated)
+// Use NewTerraformVariableTargetForUpdateItem instead
 func NewTerraformVariableTarget(config *configuration.Target) (*TerraformVariableTarget, error) {
-	if config.TerraformVariableName == "" {
+	// For backward compatibility, use the first update item
+	if len(config.Items) == 0 {
+		return nil, fmt.Errorf("no updateItems configured for target")
+	}
+	return NewTerraformVariableTargetForUpdateItem(config, &config.Items[0])
+}
+
+// NewTerraformVariableTargetForUpdateItem creates a new terraform variable target for a specific update item
+func NewTerraformVariableTargetForUpdateItem(config *configuration.Target, updateItem *configuration.TargetItem) (*TerraformVariableTarget, error) {
+	if updateItem.TerraformVariableName == "" {
 		return nil, fmt.Errorf("terraformVariableName is required for terraform-variable target")
 	}
 
 	target := &TerraformVariableTarget{
-		config: config,
+		config:     config,
+		updateItem: updateItem,
 	}
 
 	// Read the file contents during initialization
@@ -51,7 +63,7 @@ func (t *TerraformVariableTarget) readFile() error {
 func (t *TerraformVariableTarget) ReadCurrentVersion() (string, error) {
 	log.Debug().
 		Str("file", t.config.File).
-		Str("variable", t.config.TerraformVariableName).
+		Str("variable", t.updateItem.TerraformVariableName).
 		Msg("Reading current version from Terraform variable file")
 
 	// Pattern to match Terraform variable default value
@@ -63,7 +75,7 @@ func (t *TerraformVariableTarget) ReadCurrentVersion() (string, error) {
 	//   }
 	pattern := fmt.Sprintf(
 		`variable\s+"%s"\s*\{[^}]*default\s*=\s*"([^"]+)"`,
-		regexp.QuoteMeta(t.config.TerraformVariableName),
+		regexp.QuoteMeta(t.updateItem.TerraformVariableName),
 	)
 
 	re := regexp.MustCompile(pattern)
@@ -71,7 +83,7 @@ func (t *TerraformVariableTarget) ReadCurrentVersion() (string, error) {
 
 	if len(matches) < 2 {
 		return "", &VariableNotFoundError{
-			Variable: t.config.TerraformVariableName,
+			Variable: t.updateItem.TerraformVariableName,
 			File:     t.config.File,
 		}
 	}
@@ -79,7 +91,7 @@ func (t *TerraformVariableTarget) ReadCurrentVersion() (string, error) {
 	version := matches[1]
 	log.Info().
 		Str("file", t.config.File).
-		Str("variable", t.config.TerraformVariableName).
+		Str("variable", t.updateItem.TerraformVariableName).
 		Str("version", version).
 		Msg("Found current version")
 
@@ -90,22 +102,22 @@ func (t *TerraformVariableTarget) ReadCurrentVersion() (string, error) {
 func (t *TerraformVariableTarget) WriteVersion(version string) error {
 	log.Debug().
 		Str("file", t.config.File).
-		Str("variable", t.config.TerraformVariableName).
+		Str("variable", t.updateItem.TerraformVariableName).
 		Str("version", version).
 		Msg("Writing new version to Terraform variable file")
 
 	// Pattern to match and replace the default value
 	pattern := fmt.Sprintf(
 		`(variable\s+"%s"\s*\{[^}]*default\s*=\s*")([^"]+)(")`,
-		regexp.QuoteMeta(t.config.TerraformVariableName),
+		regexp.QuoteMeta(t.updateItem.TerraformVariableName),
 	)
 
 	re := regexp.MustCompile(pattern)
-	
+
 	// Check if the pattern exists
 	if !re.MatchString(t.fileContents) {
 		return &VariableNotFoundError{
-			Variable: t.config.TerraformVariableName,
+			Variable: t.updateItem.TerraformVariableName,
 			File:     t.config.File,
 		}
 	}
@@ -123,7 +135,7 @@ func (t *TerraformVariableTarget) WriteVersion(version string) error {
 
 	log.Info().
 		Str("file", t.config.File).
-		Str("variable", t.config.TerraformVariableName).
+		Str("variable", t.updateItem.TerraformVariableName).
 		Str("version", version).
 		Msg("Successfully wrote new version")
 
@@ -133,11 +145,15 @@ func (t *TerraformVariableTarget) WriteVersion(version string) error {
 // GetTargetInfo returns metadata about this target
 func (t *TerraformVariableTarget) GetTargetInfo() *TargetInfo {
 	currentVersion, _ := t.ReadCurrentVersion()
+	targetName := t.updateItem.Name
+	if targetName == "" {
+		targetName = t.config.Name
+	}
 	return &TargetInfo{
-		Name:         t.config.Name,
+		Name:         targetName,
 		Type:         t.config.Type,
 		File:         t.config.File,
-		Source:       t.config.Source,
+		Source:       t.updateItem.Source,
 		CurrentValue: currentVersion,
 	}
 }
@@ -165,7 +181,7 @@ func (t *TerraformVariableTarget) Validate() error {
 
 	log.Debug().
 		Str("file", t.config.File).
-		Str("variable", t.config.TerraformVariableName).
+		Str("variable", t.updateItem.TerraformVariableName).
 		Msg("Terraform variable target validation successful")
 
 	return nil

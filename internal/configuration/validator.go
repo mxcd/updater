@@ -131,18 +131,27 @@ func ValidateConfiguration(config *Config) *ValidationResult {
 			result.AddError(fmt.Sprintf("%s.file", fieldPrefix), "file path cannot be empty")
 		}
 
-		// Validate source reference
-		if strings.TrimSpace(target.Source) == "" {
-			result.AddError(fmt.Sprintf("%s.source", fieldPrefix), "source reference cannot be empty")
-		} else if !sourceNames[target.Source] {
-			result.AddError(fmt.Sprintf("%s.source", fieldPrefix), fmt.Sprintf("source '%s' not found in packageSources", target.Source))
+		// Validate updateItems
+		if len(target.Items) == 0 {
+			result.AddError(fmt.Sprintf("%s.updateItems", fieldPrefix), "at least one updateItem is required")
 		}
 
-		// Type-specific validation
-		switch target.Type {
-		case TargetTypeTerraformVariable:
-			if strings.TrimSpace(target.TerraformVariableName) == "" {
-				result.AddError(fmt.Sprintf("%s.terraformVariableName", fieldPrefix), "terraformVariableName is required for terraform-variable target")
+		for j, item := range target.Items {
+			itemPrefix := fmt.Sprintf("%s.updateItems[%d]", fieldPrefix, j)
+
+			// Validate source reference
+			if strings.TrimSpace(item.Source) == "" {
+				result.AddError(fmt.Sprintf("%s.source", itemPrefix), "source reference cannot be empty")
+			} else if !sourceNames[item.Source] {
+				result.AddError(fmt.Sprintf("%s.source", itemPrefix), fmt.Sprintf("source '%s' not found in packageSources", item.Source))
+			}
+
+			// Type-specific validation
+			switch target.Type {
+			case TargetTypeTerraformVariable:
+				if strings.TrimSpace(item.TerraformVariableName) == "" {
+					result.AddError(fmt.Sprintf("%s.terraformVariableName", itemPrefix), "terraformVariableName is required for terraform-variable target")
+				}
 			}
 		}
 	}

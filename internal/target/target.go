@@ -41,10 +41,20 @@ func NewTargetFactory(config *configuration.Config) *TargetFactory {
 }
 
 // CreateTarget creates a target client based on the target configuration
+// This method is deprecated - use CreateTargetForUpdateItem instead
 func (f *TargetFactory) CreateTarget(target *configuration.Target) (TargetClient, error) {
+	// For backward compatibility, use the first update item if available
+	if len(target.Items) > 0 {
+		return f.CreateTargetForUpdateItem(target, &target.Items[0])
+	}
+	return nil, &UnsupportedTargetTypeError{Type: target.Type}
+}
+
+// CreateTargetForUpdateItem creates a target client for a specific update item
+func (f *TargetFactory) CreateTargetForUpdateItem(target *configuration.Target, updateItem *configuration.TargetItem) (TargetClient, error) {
 	switch target.Type {
 	case configuration.TargetTypeTerraformVariable:
-		return NewTerraformVariableTarget(target)
+		return NewTerraformVariableTargetForUpdateItem(target, updateItem)
 	default:
 		return nil, &UnsupportedTargetTypeError{Type: target.Type}
 	}

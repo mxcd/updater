@@ -50,11 +50,14 @@ func NewCompareEngine(config *configuration.Config) *CompareEngine {
 func (e *CompareEngine) CompareAll() ([]*ComparisonResult, error) {
 	log.Info().Msg("Starting comparison of all targets")
 
-	results := make([]*ComparisonResult, 0, len(e.config.Targets))
+	results := make([]*ComparisonResult, 0)
 
 	for _, targetConfig := range e.config.Targets {
-		result := e.compareTarget(targetConfig)
-		results = append(results, result)
+		// Each target can have multiple update items
+		for _, updateItem := range targetConfig.Items {
+			result := e.compareTargetUpdateItem(targetConfig, &updateItem)
+			results = append(results, result)
+		}
 	}
 
 	log.Info().
@@ -65,36 +68,42 @@ func (e *CompareEngine) CompareAll() ([]*ComparisonResult, error) {
 	return results, nil
 }
 
-// compareTarget compares a single target with its source
-func (e *CompareEngine) compareTarget(targetConfig *configuration.Target) *ComparisonResult {
+// compareTargetUpdateItem compares a single target update item with its source
+func (e *CompareEngine) compareTargetUpdateItem(targetConfig *configuration.Target, updateItem *configuration.TargetItem) *ComparisonResult {
+	// Use updateItem name if specified, otherwise use target name
+	targetName := updateItem.Name
+	if targetName == "" {
+		targetName = targetConfig.Name
+	}
+
 	result := &ComparisonResult{
-		TargetName: targetConfig.Name,
+		TargetName: targetName,
 		TargetFile: targetConfig.File,
-		SourceName: targetConfig.Source,
+		SourceName: updateItem.Source,
 	}
 
 	log.Debug().
-		Str("target", targetConfig.Name).
-		Str("source", targetConfig.Source).
+		Str("target", targetName).
+		Str("source", updateItem.Source).
 		Msg("Comparing target with source")
 
 	// Find the source
-	source := e.findSource(targetConfig.Source)
+	source := e.findSource(updateItem.Source)
 	if source == nil {
-		result.Error = fmt.Errorf("source '%s' not found", targetConfig.Source)
+		result.Error = fmt.Errorf("source '%s' not found", updateItem.Source)
 		log.Error().
-			Str("target", targetConfig.Name).
-			Str("source", targetConfig.Source).
+			Str("target", targetName).
+			Str("source", updateItem.Source).
 			Msg("Source not found")
 		return result
 	}
 
 	// Check if source has versions
 	if len(source.Versions) == 0 {
-		result.Error = fmt.Errorf("no versions available for source '%s'", targetConfig.Source)
+		result.Error = fmt.Errorf("no versions available for source '%s'", updateItem.Source)
 		log.Warn().
-			Str("target", targetConfig.Name).
-			Str("source", targetConfig.Source).
+			Str("target", targetName).
+			Str("source", updateItem.Source).
 			Msg("No versions available for source")
 		return result
 	}
@@ -104,12 +113,12 @@ func (e *CompareEngine) compareTarget(targetConfig *configuration.Target) *Compa
 	result.LatestVersion = latestVersion.Version
 
 	// Create target client
-	targetClient, err := e.targetFactory.CreateTarget(targetConfig)
+	targetClient, err := e.targetFactory.CreateTargetForUpdateItem(targetConfig, updateItem)
 	if err != nil {
 		result.Error = fmt.Errorf("failed to create target client: %w", err)
 		log.Error().
 			Err(err).
-			Str("target", targetConfig.Name).
+			Str("target", targetName).
 			Msg("Failed to create target client")
 		return result
 	}
@@ -120,14 +129,18 @@ func (e *CompareEngine) compareTarget(targetConfig *configuration.Target) *Compa
 		result.Error = fmt.Errorf("failed to read current version: %w", err)
 		log.Error().
 			Err(err).
-			Str("target", targetConfig.Name).
+			Str("target", targetName).
 			Msg("Failed to read current version")
 		return result
 	}
 	result.CurrentVersion = currentVersion
 
+	// Normalize versions for comparison (remove v prefix)
+	normalizedCurrent := normalizeVersion(currentVersion)
+	normalizedLatest := normalizeVersion(latestVersion.Version)
+
 	// Determine if update is needed and what type
-	if currentVersion == latestVersion.Version {
+	if normalizedCurrent == normalizedLatest {
 		result.NeedsUpdate = false
 		result.UpdateType = UpdateTypeNone
 		log.Info().
@@ -136,21 +149,21 @@ func (e *CompareEngine) compareTarget(targetConfig *configuration.Target) *Compa
 			Msg("Target is up to date")
 	} else {
 		result.NeedsUpdate = true
-		
+
 		// Try to find current version in source versions to get semantic version info
 		var currentSemVer *configuration.PackageSourceVersion
 		for _, v := range source.Versions {
-			if v.Version == currentVersion {
+			if normalizeVersion(v.Version) == normalizedCurrent {
 				currentSemVer = v
 				break
 			}
 		}
-		
+
 		// If current version not found in source, try to parse it
 		if currentSemVer == nil {
 			currentSemVer = parseVersionString(currentVersion)
 		}
-		
+
 		result.UpdateType = determineUpdateType(currentSemVer, latestVersion)
 		log.Info().
 			Str("target", targetConfig.Name).
@@ -173,19 +186,26 @@ func (e *CompareEngine) findSource(name string) *configuration.PackageSource {
 	return nil
 }
 
+// normalizeVersion removes the "v" or "V" prefix from a version string for comparison
+func normalizeVersion(version string) string {
+	normalized := strings.TrimPrefix(version, "v")
+	normalized = strings.TrimPrefix(normalized, "V")
+	return normalized
+}
+
 // parseVersionString attempts to parse a version string into semantic version components
 func parseVersionString(version string) *configuration.PackageSourceVersion {
 	v := &configuration.PackageSourceVersion{
 		Version: version,
 	}
-	
+
 	// Remove common prefixes
 	versionStr := strings.TrimPrefix(version, "v")
 	versionStr = strings.TrimPrefix(versionStr, "V")
-	
+
 	// Split by dots
 	parts := strings.Split(versionStr, ".")
-	
+
 	if len(parts) >= 1 {
 		if major, err := strconv.Atoi(parts[0]); err == nil {
 			v.MajorVersion = major
@@ -203,7 +223,7 @@ func parseVersionString(version string) *configuration.PackageSourceVersion {
 			v.PatchVersion = patch
 		}
 	}
-	
+
 	return v
 }
 
@@ -220,14 +240,14 @@ func determineUpdateType(current, latest *configuration.PackageSourceVersion) Up
 	if latest.MajorVersion < current.MajorVersion {
 		return UpdateTypeNone // Downgrade
 	}
-	
+
 	if latest.MinorVersion > current.MinorVersion {
 		return UpdateTypeMinor
 	}
 	if latest.MinorVersion < current.MinorVersion {
 		return UpdateTypeNone // Downgrade
 	}
-	
+
 	if latest.PatchVersion > current.PatchVersion {
 		return UpdateTypePatch
 	}

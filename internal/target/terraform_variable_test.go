@@ -38,8 +38,8 @@ func TestTerraformVariableTarget_ReadCurrentVersion(t *testing.T) {
 			expectError:  false,
 		},
 		{
-			name: "single line variable",
-			fileContent: `variable "version" { default = "3.4.5" }`,
+			name:         "single line variable",
+			fileContent:  `variable "version" { default = "3.4.5" }`,
 			variableName: "version",
 			expectedVer:  "3.4.5",
 			expectError:  false,
@@ -83,11 +83,15 @@ variable "third_version" {
 
 			// Create target
 			config := &configuration.Target{
-				Name:                  "test-target",
-				Type:                  configuration.TargetTypeTerraformVariable,
-				File:                  tmpFile,
-				TerraformVariableName: tt.variableName,
-				Source:                "test-source",
+				Name: "test-target",
+				Type: configuration.TargetTypeTerraformVariable,
+				File: tmpFile,
+				Items: []configuration.TargetItem{
+					{
+						TerraformVariableName: tt.variableName,
+						Source:                "test-source",
+					},
+				},
 			}
 
 			target, err := NewTerraformVariableTarget(config)
@@ -173,11 +177,15 @@ func TestTerraformVariableTarget_WriteVersion(t *testing.T) {
 
 			// Create target
 			config := &configuration.Target{
-				Name:                  "test-target",
-				Type:                  configuration.TargetTypeTerraformVariable,
-				File:                  tmpFile,
-				TerraformVariableName: tt.variableName,
-				Source:                "test-source",
+				Name: "test-target",
+				Type: configuration.TargetTypeTerraformVariable,
+				File: tmpFile,
+				Items: []configuration.TargetItem{
+					{
+						TerraformVariableName: tt.variableName,
+						Source:                "test-source",
+					},
+				},
 			}
 
 			target, err := NewTerraformVariableTarget(config)
@@ -266,11 +274,15 @@ func TestTerraformVariableTarget_Validate(t *testing.T) {
 
 			// Create target
 			config := &configuration.Target{
-				Name:                  "test-target",
-				Type:                  configuration.TargetTypeTerraformVariable,
-				File:                  tmpFile,
-				TerraformVariableName: tt.variableName,
-				Source:                "test-source",
+				Name: "test-target",
+				Type: configuration.TargetTypeTerraformVariable,
+				File: tmpFile,
+				Items: []configuration.TargetItem{
+					{
+						TerraformVariableName: tt.variableName,
+						Source:                "test-source",
+					},
+				},
 			}
 
 			target, err := NewTerraformVariableTarget(config)
@@ -311,11 +323,15 @@ func TestTerraformVariableTarget_GetTargetInfo(t *testing.T) {
 	}
 
 	config := &configuration.Target{
-		Name:                  "test-target",
-		Type:                  configuration.TargetTypeTerraformVariable,
-		File:                  tmpFile,
-		TerraformVariableName: "app_version",
-		Source:                "test-source",
+		Name: "test-target",
+		Type: configuration.TargetTypeTerraformVariable,
+		File: tmpFile,
+		Items: []configuration.TargetItem{
+			{
+				TerraformVariableName: "app_version",
+				Source:                "test-source",
+			},
+		},
 	}
 
 	target, err := NewTerraformVariableTarget(config)

@@ -41,11 +41,15 @@ func TestTargetFactory_CreateTarget(t *testing.T) {
 			}
 
 			targetConfig := &configuration.Target{
-				Name:                  "test-target",
-				Type:                  tt.targetType,
-				File:                  tmpFile,
-				TerraformVariableName: "version",
-				Source:                "test-source",
+				Name: "test-target",
+				Type: tt.targetType,
+				File: tmpFile,
+				Items: []configuration.TargetItem{
+					{
+						TerraformVariableName: "version",
+						Source:                "test-source",
+					},
+				},
 			}
 
 			factory := NewTargetFactory(config)
@@ -88,18 +92,26 @@ func TestTargetFactory_CreateAllTargets(t *testing.T) {
 		PackageSources: []*configuration.PackageSource{},
 		Targets: []*configuration.Target{
 			{
-				Name:                  "target1",
-				Type:                  configuration.TargetTypeTerraformVariable,
-				File:                  file1,
-				TerraformVariableName: "version",
-				Source:                "source1",
+				Name: "target1",
+				Type: configuration.TargetTypeTerraformVariable,
+				File: file1,
+				Items: []configuration.TargetItem{
+					{
+						TerraformVariableName: "version",
+						Source:                "source1",
+					},
+				},
 			},
 			{
-				Name:                  "target2",
-				Type:                  configuration.TargetTypeTerraformVariable,
-				File:                  file2,
-				TerraformVariableName: "version",
-				Source:                "source2",
+				Name: "target2",
+				Type: configuration.TargetTypeTerraformVariable,
+				File: file2,
+				Items: []configuration.TargetItem{
+					{
+						TerraformVariableName: "version",
+						Source:                "source2",
+					},
+				},
 			},
 		},
 	}

@@ -30,11 +30,15 @@ func TestValidateConfiguration_Targets(t *testing.T) {
 				},
 				Targets: []*Target{
 					{
-						Name:                  "test-target",
-						Type:                  TargetTypeTerraformVariable,
-						File:                  "test.tf",
-						TerraformVariableName: "version",
-						Source:                "test-source",
+						Name: "test-target",
+						Type: TargetTypeTerraformVariable,
+						File: "test.tf",
+						Items: []TargetItem{
+							{
+								TerraformVariableName: "version",
+								Source:                "test-source",
+							},
+						},
 					},
 				},
 			},
@@ -51,10 +55,15 @@ func TestValidateConfiguration_Targets(t *testing.T) {
 				},
 				Targets: []*Target{
 					{
-						Name:   "",
-						Type:   TargetTypeTerraformVariable,
-						File:   "test.tf",
-						Source: "test-source",
+						Name: "",
+						Type: TargetTypeTerraformVariable,
+						File: "test.tf",
+						Items: []TargetItem{
+							{
+								TerraformVariableName: "version",
+								Source:                "test-source",
+							},
+						},
 					},
 				},
 			},
@@ -72,10 +81,15 @@ func TestValidateConfiguration_Targets(t *testing.T) {
 				},
 				Targets: []*Target{
 					{
-						Name:   "test-target",
-						Type:   TargetType("invalid"),
-						File:   "test.tf",
-						Source: "test-source",
+						Name: "test-target",
+						Type: TargetType("invalid"),
+						File: "test.tf",
+						Items: []TargetItem{
+							{
+								TerraformVariableName: "version",
+								Source:                "test-source",
+							},
+						},
 					},
 				},
 			},
@@ -93,10 +107,15 @@ func TestValidateConfiguration_Targets(t *testing.T) {
 				},
 				Targets: []*Target{
 					{
-						Name:   "test-target",
-						Type:   TargetTypeTerraformVariable,
-						File:   "",
-						Source: "test-source",
+						Name: "test-target",
+						Type: TargetTypeTerraformVariable,
+						File: "",
+						Items: []TargetItem{
+							{
+								TerraformVariableName: "version",
+								Source:                "test-source",
+							},
+						},
 					},
 				},
 			},
@@ -114,10 +133,15 @@ func TestValidateConfiguration_Targets(t *testing.T) {
 				},
 				Targets: []*Target{
 					{
-						Name:   "test-target",
-						Type:   TargetTypeTerraformVariable,
-						File:   "test.tf",
-						Source: "non-existent-source",
+						Name: "test-target",
+						Type: TargetTypeTerraformVariable,
+						File: "test.tf",
+						Items: []TargetItem{
+							{
+								TerraformVariableName: "version",
+								Source:                "non-existent-source",
+							},
+						},
 					},
 				},
 			},
@@ -135,11 +159,15 @@ func TestValidateConfiguration_Targets(t *testing.T) {
 				},
 				Targets: []*Target{
 					{
-						Name:                  "test-target",
-						Type:                  TargetTypeTerraformVariable,
-						File:                  "test.tf",
-						TerraformVariableName: "",
-						Source:                "test-source",
+						Name: "test-target",
+						Type: TargetTypeTerraformVariable,
+						File: "test.tf",
+						Items: []TargetItem{
+							{
+								TerraformVariableName: "",
+								Source:                "test-source",
+							},
+						},
 					},
 				},
 			},
@@ -158,18 +186,26 @@ func TestValidateConfiguration_Targets(t *testing.T) {
 				},
 				Targets: []*Target{
 					{
-						Name:                  "target1",
-						Type:                  TargetTypeTerraformVariable,
-						File:                  "test1.tf",
-						TerraformVariableName: "version1",
-						Source:                "source1",
+						Name: "target1",
+						Type: TargetTypeTerraformVariable,
+						File: "test1.tf",
+						Items: []TargetItem{
+							{
+								TerraformVariableName: "version1",
+								Source:                "source1",
+							},
+						},
 					},
 					{
-						Name:                  "target2",
-						Type:                  TargetTypeTerraformVariable,
-						File:                  "test2.tf",
-						TerraformVariableName: "version2",
-						Source:                "source2",
+						Name: "target2",
+						Type: TargetTypeTerraformVariable,
+						File: "test2.tf",
+						Items: []TargetItem{
+							{
+								TerraformVariableName: "version2",
+								Source:                "source2",
+							},
+						},
 					},
 				},
 			},
