@@ -44,9 +44,11 @@ packageSourceProviders:
 
 ## SOPS Integration
 
+The updater uses the official SOPS Go library (`github.com/getsops/sops/v3`) for decrypting encrypted configuration files. This provides native integration with all SOPS features.
+
 ### What is SOPS?
 
-[SOPS](https://github.com/mozilla/sops) (Secrets OPerationS) is an encryption tool that encrypts YAML, JSON, and other file formats while keeping the structure readable. It supports multiple encryption backends:
+[SOPS](https://github.com/getsops/sops) (Secrets OPerationS) is an encryption tool that encrypts YAML, JSON, and other file formats while keeping the structure readable. It supports multiple encryption backends:
 
 - Age
 - PGP/GPG
@@ -57,13 +59,13 @@ packageSourceProviders:
 
 ### Setting Up SOPS
 
-1. **Install SOPS**:
+1. **Install SOPS** (optional for CLI usage, library is built-in):
    ```bash
    # macOS
    brew install sops
    
    # Linux
-   # Download from https://github.com/mozilla/sops/releases
+   # Download from https://github.com/getsops/sops/releases
    ```
 
 2. **Create an encryption key**:
