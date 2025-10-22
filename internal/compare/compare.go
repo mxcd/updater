@@ -143,7 +143,7 @@ func (e *CompareEngine) compareTargetUpdateItem(targetConfig *configuration.Targ
 	if normalizedCurrent == normalizedLatest {
 		result.NeedsUpdate = false
 		result.UpdateType = UpdateTypeNone
-		log.Info().
+		log.Debug().
 			Str("target", targetConfig.Name).
 			Str("version", currentVersion).
 			Msg("Target is up to date")

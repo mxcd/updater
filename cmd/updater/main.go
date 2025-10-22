@@ -131,6 +131,11 @@ func main() {
 						Value:   ".updaterconfig.yml",
 						Sources: cli.EnvVars("UPDATER_CONFIG"),
 					},
+					&cli.StringFlag{
+						Name:  "output",
+						Usage: "Output format: table, json, yaml",
+						Value: "table",
+					},
 					&cli.BoolFlag{
 						Name:    "dry-run",
 						Aliases: []string{"d"},
@@ -221,6 +226,7 @@ func compareCommand(ctx context.Context, cmd *cli.Command) error {
 func applyCommand(ctx context.Context, cmd *cli.Command) error {
 	options := &actions.ApplyOptions{
 		ConfigPath: cmd.String("config"),
+    OutputFormat: cmd.String("output"),
 		DryRun:     cmd.Bool("dry-run"),
 		Limit:      cmd.Int("limit"),
 		Only:       cmd.String("only"),

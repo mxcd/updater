@@ -13,10 +13,11 @@ import (
 )
 
 type ApplyOptions struct {
-	ConfigPath string
-	DryRun     bool
-	Limit      int
-	Only       string
+	ConfigPath   string
+	OutputFormat string
+	DryRun       bool
+	Limit        int
+	Only         string
 }
 
 // PatchGroup represents a group of updates that should be applied together
@@ -64,7 +65,7 @@ func Apply(options *ApplyOptions) error {
 	log.Info().Msg("Configuration is valid")
 
 	// Get comparison results without outputting them
-	compareResult, err := compareInternal(config, options.Limit, options.Only)
+	compareResult, err := compareInternal(config, options.Limit, options.Only, options.OutputFormat)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to compare versions")
 		return fmt.Errorf("comparison error: %w", err)
@@ -329,7 +330,7 @@ func groupUpdatesByFile(updates []*UpdateItem) map[string][]*UpdateItem {
 }
 
 // compareInternal performs comparison without outputting results
-func compareInternal(config *configuration.Config, limit int, only string) (*CompareResult, error) {
+func compareInternal(config *configuration.Config, limit int, only string, outputFormat string) (*CompareResult, error) {
 	// Create orchestrator and scrape sources
 	orchestrator, err := scraper.NewOrchestrator(config)
 	if err != nil {
@@ -363,6 +364,8 @@ func compareInternal(config *configuration.Config, limit int, only string) (*Com
 
 	// Filter results based on 'only' flag
 	filteredResults := filterComparisonResults(results, only)
+
+	err = outputComparisonResults(filteredResults, outputFormat)
 
 	// Check if there are pending updates
 	hasUpdates := false
