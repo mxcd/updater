@@ -35,7 +35,7 @@ Use `${SOPS[path/to/file.yml].yaml.path.to.value}` syntax to reference values in
 
 ```yaml
 packageSourceProviders:
-  - name: git.i.mercedes-benz.com
+  - name: git.supercorp.com
     type: github
     baseUrl: ${BASE_URL}
     authType: token
@@ -200,7 +200,7 @@ The updater will fail to start if:
 Error messages will clearly indicate which substitution failed:
 
 ```
-Error: failed to substitute variables: failed to substitute Token in provider git.i.mercedes-benz.com: 
+Error: failed to substitute variables: failed to substitute Token in provider git.supercorp.com: 
 failed to resolve SOPS reference ${SOPS[credentials.secret.enc.yml].token}: 
 failed to decrypt SOPS file: sops decryption failed: no decryption key found
 ```

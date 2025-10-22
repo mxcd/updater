@@ -33,27 +33,88 @@ func NewGitHubClient(repoURL string, targetActor *configuration.TargetActor) (*G
 		return nil, fmt.Errorf("GitHub token is required for PR creation")
 	}
 
+	// Extract base URL from repo URL
+	baseURL := extractAPIBaseURL(repoURL)
+
 	return &GitHubClient{
 		Token:   token,
-		BaseURL: "https://api.github.com",
+		BaseURL: baseURL,
 		RepoURL: repoURL,
 		Owner:   owner,
 		Repo:    repo,
 	}, nil
 }
 
+// extractAPIBaseURL extracts the API base URL from a repository URL
+func extractAPIBaseURL(repoURL string) string {
+	// Handle HTTPS URLs with credentials: https://user:token@host/owner/repo.git
+	if strings.HasPrefix(repoURL, "https://") && strings.Contains(repoURL, "@") {
+		atIndex := strings.Index(repoURL, "@")
+		if atIndex != -1 {
+			remainder := repoURL[atIndex+1:]
+			slashIndex := strings.Index(remainder, "/")
+			if slashIndex != -1 {
+				host := remainder[:slashIndex]
+				// Enterprise GitHub uses /api/v3, github.com uses api.github.com
+				if host == "github.com" {
+					return "https://api.github.com"
+				}
+				return fmt.Sprintf("https://%s/api/v3", host)
+			}
+		}
+	}
+
+	// Handle HTTPS URLs without credentials
+	if strings.HasPrefix(repoURL, "https://github.com/") {
+		return "https://api.github.com"
+	}
+
+	if strings.HasPrefix(repoURL, "https://") {
+		// Extract host from URL
+		url := strings.TrimPrefix(repoURL, "https://")
+		slashIndex := strings.Index(url, "/")
+		if slashIndex != -1 {
+			host := url[:slashIndex]
+			return fmt.Sprintf("https://%s/api/v3", host)
+		}
+	}
+
+	// Handle SSH URLs: git@host:owner/repo.git
+	if strings.HasPrefix(repoURL, "git@") {
+		colonIndex := strings.Index(repoURL, ":")
+		if colonIndex != -1 {
+			host := strings.TrimPrefix(repoURL[:colonIndex], "git@")
+			if host == "github.com" {
+				return "https://api.github.com"
+			}
+			return fmt.Sprintf("https://%s/api/v3", host)
+		}
+	}
+
+	// Default to github.com
+	return "https://api.github.com"
+}
+
 // parseGitHubURL parses a GitHub URL to extract owner and repo
 func parseGitHubURL(url string) (string, string, error) {
-	// Handle HTTPS URLs with credentials: https://user:pass@github.com/owner/repo.git
-	if strings.HasPrefix(url, "https://") && strings.Contains(url, "@github.com/") {
-		// Extract path after @github.com/
-		parts := strings.SplitN(url, "@github.com/", 2)
-		if len(parts) == 2 {
-			path := parts[1]
-			path = strings.TrimSuffix(path, ".git")
-			pathParts := strings.Split(path, "/")
-			if len(pathParts) >= 2 {
-				return pathParts[0], pathParts[1], nil
+	// Handle HTTPS URLs with credentials: https://user:token@host/owner/repo.git
+	// This supports both github.com and enterprise GitHub instances
+	if strings.HasPrefix(url, "https://") && strings.Contains(url, "@") {
+		// Extract path after @host/
+		atIndex := strings.Index(url, "@")
+		if atIndex != -1 {
+			// Everything after @ is host/owner/repo.git
+			remainder := url[atIndex+1:]
+			
+			// Find the first / after the host
+			slashIndex := strings.Index(remainder, "/")
+			if slashIndex != -1 {
+				path := remainder[slashIndex+1:]
+				path = strings.TrimSuffix(path, ".git")
+				pathParts := strings.Split(path, "/")
+				if len(pathParts) >= 2 {
+					return pathParts[0], pathParts[1], nil
+				}
 			}
 		}
 	}

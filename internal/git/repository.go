@@ -150,28 +150,55 @@ func (r *Repository) CheckoutOrCreateBranch(branchName string) (bool, error) {
 		return false, fmt.Errorf("failed to checkout base branch: %w", err)
 	}
 
-	// Pull latest changes
+	// Pull latest changes from base branch
 	if err := r.pull(); err != nil {
-		log.Warn().Err(err).Msg("Failed to pull latest changes, continuing anyway")
+		log.Warn().Err(err).Msg("Failed to pull latest changes from base branch, continuing anyway")
 	}
 
 	// Try to fetch the branch from remote
-	r.fetchBranch(branchName)
+	remoteBranchExists := r.fetchBranch(branchName) == nil
 
-	// Try to checkout the existing branch
-	if err := r.CheckoutBranch(branchName); err == nil {
+	// Check if branch exists locally
+	branchExistsLocally := r.CheckoutBranch(branchName) == nil
+
+	if branchExistsLocally {
 		r.BranchName = branchName
-		log.Debug().Str("branch", branchName).Msg("Checked out existing branch")
+		log.Debug().Str("branch", branchName).Msg("Checked out existing local branch")
 
-		// Reset to base branch to get latest changes
-		if err := r.resetToBaseBranch(); err != nil {
-			log.Warn().Err(err).Msg("Failed to reset branch to base, continuing anyway")
+		if remoteBranchExists {
+			// Pull latest changes from the remote branch
+			if err := r.pull(); err != nil {
+				log.Warn().Err(err).Msg("Failed to pull latest changes from remote branch, continuing anyway")
+			}
+			log.Debug().Str("branch", branchName).Msg("Pulled latest changes from remote branch")
+		} else {
+			// Remote branch doesn't exist, reset to base branch to get latest changes
+			if err := r.resetToBaseBranch(); err != nil {
+				log.Warn().Err(err).Msg("Failed to reset branch to base, continuing anyway")
+			}
 		}
 
 		return true, nil
 	}
 
-	// Branch doesn't exist locally, create it
+	// Branch doesn't exist locally
+	if remoteBranchExists {
+		// Create local branch tracking the remote branch
+		cmd := exec.Command("git", "checkout", "-b", branchName, fmt.Sprintf("origin/%s", branchName))
+		cmd.Dir = r.WorkingDirectory
+
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return false, fmt.Errorf("failed to checkout remote branch: %w, output: %s", err, string(output))
+		}
+
+		r.BranchName = branchName
+		log.Debug().Str("branch", branchName).Msg("Checked out branch from remote")
+
+		return true, nil
+	}
+
+	// Branch doesn't exist locally or remotely, create it from base branch
 	cmd := exec.Command("git", "checkout", "-b", branchName)
 	cmd.Dir = r.WorkingDirectory
 
@@ -229,7 +256,14 @@ func (r *Repository) CheckoutBranch(branchName string) error {
 
 // pull pulls latest changes from remote
 func (r *Repository) pull() error {
-	cmd := exec.Command("git", "pull")
+	// Get current branch name
+	currentBranch, err := r.getCurrentBranch()
+	if err != nil {
+		return fmt.Errorf("failed to get current branch: %w", err)
+	}
+
+	// Pull with explicit remote and branch to avoid tracking issues
+	cmd := exec.Command("git", "pull", "origin", currentBranch)
 	cmd.Dir = r.WorkingDirectory
 
 	output, err := cmd.CombinedOutput()
@@ -247,9 +281,8 @@ func (r *Repository) Commit(options *CommitOptions) error {
 		Int("files", len(options.Files)).
 		Msg("Creating commit")
 
-	// Configure git user
-	if err := r.configureGitUser(); err != nil {
-		return fmt.Errorf("failed to configure git user: %w", err)
+	if r.TargetActor == nil {
+		return fmt.Errorf("target actor not configured")
 	}
 
 	// Stage files
@@ -259,9 +292,15 @@ func (r *Repository) Commit(options *CommitOptions) error {
 		}
 	}
 
-	// Commit
+	// Commit with environment variables to avoid persisting git config changes
 	cmd := exec.Command("git", "commit", "-m", options.Message)
 	cmd.Dir = r.WorkingDirectory
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("GIT_AUTHOR_NAME=%s", r.TargetActor.Name),
+		fmt.Sprintf("GIT_AUTHOR_EMAIL=%s", r.TargetActor.Email),
+		fmt.Sprintf("GIT_COMMITTER_NAME=%s", r.TargetActor.Name),
+		fmt.Sprintf("GIT_COMMITTER_EMAIL=%s", r.TargetActor.Email),
+	)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -269,29 +308,6 @@ func (r *Repository) Commit(options *CommitOptions) error {
 	}
 
 	log.Debug().Str("message", options.Message).Msg("Created commit")
-
-	return nil
-}
-
-// configureGitUser configures git user name and email
-func (r *Repository) configureGitUser() error {
-	if r.TargetActor == nil {
-		return fmt.Errorf("target actor not configured")
-	}
-
-	// Set user name
-	cmd := exec.Command("git", "config", "user.name", r.TargetActor.Name)
-	cmd.Dir = r.WorkingDirectory
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set git user.name: %w, output: %s", err, string(output))
-	}
-
-	// Set user email
-	cmd = exec.Command("git", "config", "user.email", r.TargetActor.Email)
-	cmd.Dir = r.WorkingDirectory
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set git user.email: %w, output: %s", err, string(output))
-	}
 
 	return nil
 }

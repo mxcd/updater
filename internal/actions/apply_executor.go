@@ -43,7 +43,7 @@ func applyPatchGroup(config *configuration.Config, group *PatchGroup) error {
 }
 
 // applyFileUpdates applies updates to a single file
-func applyFileUpdates(config *configuration.Config, filePath string, updates []*UpdateItem, group *PatchGroup) error {
+func applyFileUpdates(config *configuration.Config, filePath string, updates []*UpdateItem, group *PatchGroup) (err error) {
 	log.Debug().
 		Str("file", filePath).
 		Int("updates", len(updates)).
@@ -56,6 +56,18 @@ func applyFileUpdates(config *configuration.Config, filePath string, updates []*
 	if err := repo.DetectRepository(filePath); err != nil {
 		return fmt.Errorf("failed to detect git repository: %w", err)
 	}
+
+	// Ensure we always checkout back to the base branch on error
+	defer func() {
+		if err != nil {
+			if checkoutErr := repo.CheckoutBranch(repo.BaseBranch); checkoutErr != nil {
+				log.Error().Err(checkoutErr).Str("branch", repo.BaseBranch).Msg("Failed to checkout base branch after error")
+				fmt.Printf("  ❌ Error: Could not checkout back to %s: %v\n", repo.BaseBranch, checkoutErr)
+			} else {
+				fmt.Printf("  ↩️  Reverted to %s due to error\n", repo.BaseBranch)
+			}
+		}
+	}()
 
 	// Create branch name using format: chore/update/<patchGroup>
 	branchName := fmt.Sprintf("chore/update/%s", group.Name)
@@ -144,17 +156,10 @@ func applyFileUpdates(config *configuration.Config, filePath string, updates []*
 
 	// Push branch if needed
 	if needsPush {
-		if branchExists {
-			if err := repo.ForcePush(); err != nil {
-				return fmt.Errorf("failed to force push branch: %w", err)
-			}
-			fmt.Printf("  📤 Force pushed branch to remote\n")
-		} else {
-			if err := repo.Push(); err != nil {
-				return fmt.Errorf("failed to push branch: %w", err)
-			}
-			fmt.Printf("  📤 Pushed branch to remote\n")
+		if err := repo.Push(); err != nil {
+			return fmt.Errorf("failed to push branch: %w", err)
 		}
+		fmt.Printf("  📤 Pushed branch to remote\n")
 	} else {
 		fmt.Printf("  ℹ️  Branch already up to date on remote\n")
 	}
