@@ -41,10 +41,24 @@ func TestParseGitHubURL(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:      "SSH URL",
+			name:      "SSH URL for GitHub.com",
 			url:       "git@github.com:owner/repo.git",
 			wantOwner: "owner",
 			wantRepo:  "repo",
+			wantErr:   false,
+		},
+		{
+			name:      "SSH URL for enterprise GitHub",
+			url:       "git@git.supercorp.com:project/cluster.git",
+			wantOwner: "project",
+			wantRepo:  "cluster",
+			wantErr:   false,
+		},
+		{
+			name:      "SSH URL for enterprise GitHub without .git",
+			url:       "git@git.supercorp.com:project/cluster",
+			wantOwner: "project",
+			wantRepo:  "cluster",
 			wantErr:   false,
 		},
 		{
@@ -59,6 +73,13 @@ func TestParseGitHubURL(t *testing.T) {
 			url:       "https://user:token@git.example.com/org/project.git",
 			wantOwner: "org",
 			wantRepo:  "project",
+			wantErr:   false,
+		},
+		{
+			name:      "HTTPS URL for enterprise GitHub without credentials",
+			url:       "https://git.supercorp.com/project/cluster.git",
+			wantOwner: "project",
+			wantRepo:  "cluster",
 			wantErr:   false,
 		},
 		{
@@ -123,8 +144,8 @@ func TestExtractAPIBaseURL(t *testing.T) {
 		},
 		{
 			name:    "Enterprise GitHub SSH",
-			repoURL: "git@git.example.com:owner/repo.git",
-			want:    "https://git.example.com/api/v3",
+			repoURL: "git@git.supercorp.com:project/cluster.git",
+			want:    "https://git.supercorp.com/api/v3",
 		},
 	}
 

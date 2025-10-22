@@ -129,13 +129,34 @@ func parseGitHubURL(url string) (string, string, error) {
 		}
 	}
 
-	// Handle SSH URLs: git@github.com:owner/repo.git
-	if strings.HasPrefix(url, "git@github.com:") {
-		path := strings.TrimPrefix(url, "git@github.com:")
-		path = strings.TrimSuffix(path, ".git")
-		parts := strings.Split(path, "/")
-		if len(parts) >= 2 {
-			return parts[0], parts[1], nil
+	// Handle HTTPS URLs for enterprise GitHub: https://host/owner/repo.git
+	if strings.HasPrefix(url, "https://") {
+		// Extract host and path
+		urlWithoutProtocol := strings.TrimPrefix(url, "https://")
+		slashIndex := strings.Index(urlWithoutProtocol, "/")
+		if slashIndex != -1 {
+			path := urlWithoutProtocol[slashIndex+1:]
+			path = strings.TrimSuffix(path, ".git")
+			pathParts := strings.Split(path, "/")
+			if len(pathParts) >= 2 {
+				return pathParts[0], pathParts[1], nil
+			}
+		}
+	}
+
+	// Handle SSH URLs: git@host:owner/repo.git
+	if strings.HasPrefix(url, "git@") {
+		// Extract everything after git@
+		remainder := strings.TrimPrefix(url, "git@")
+		colonIndex := strings.Index(remainder, ":")
+		if colonIndex != -1 {
+			// Everything after : is owner/repo.git
+			path := remainder[colonIndex+1:]
+			path = strings.TrimSuffix(path, ".git")
+			pathParts := strings.Split(path, "/")
+			if len(pathParts) >= 2 {
+				return pathParts[0], pathParts[1], nil
+			}
 		}
 	}
 
