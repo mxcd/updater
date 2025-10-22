@@ -10,10 +10,11 @@ type Config struct {
 type PackageSourceType string
 
 const (
-	PackageSourceTypeGitRelease   PackageSourceType = "git-release"
-	PackageSourceTypeGitTag       PackageSourceType = "git-tag"
-	PackageSourceTypeGitHelmChart PackageSourceType = "git-helm-chart"
-	PackageSourceTypeDockerImage  PackageSourceType = "docker-image"
+	PackageSourceTypeGitRelease     PackageSourceType = "git-release"
+	PackageSourceTypeGitTag         PackageSourceType = "git-tag"
+	PackageSourceTypeGitHelmChart   PackageSourceType = "git-helm-chart"
+	PackageSourceTypeDockerImage    PackageSourceType = "docker-image"
+	PackageSourceTypeHelmRepository PackageSourceType = "helm-chart"
 )
 
 type PackageSource struct {
@@ -21,8 +22,9 @@ type PackageSource struct {
 	Provider          string                  `yaml:"provider"`
 	Type              PackageSourceType       `yaml:"type"`
 	URI               string                  `yaml:"uri"`
-	Branch            string                  `yaml:"branch,omitempty"` // Git branch (for git-helm-chart), defaults to "main"
-	Path              string                  `yaml:"path,omitempty"`   // File path in repository (for git-helm-chart)
+	Branch            string                  `yaml:"branch,omitempty"`    // Git branch (for git-helm-chart), defaults to "main"
+	Path              string                  `yaml:"path,omitempty"`      // File path in repository (for git-helm-chart)
+	ChartName         string                  `yaml:"chartName,omitempty"` // Helm chart name (for helm-chart)
 	VersionConstraint string                  `yaml:"versionConstraint,omitempty"`
 	TagPattern        string                  `yaml:"tagPattern,omitempty"`     // Regex to match desired tags
 	ExcludePattern    string                  `yaml:"excludePattern,omitempty"` // Regex to exclude unwanted tags
@@ -45,6 +47,7 @@ const (
 	PackageSourceProviderTypeGitHub PackageSourceProviderType = "github"
 	PackageSourceProviderTypeHarbor PackageSourceProviderType = "harbor"
 	PackageSourceProviderTypeDocker PackageSourceProviderType = "docker"
+	PackageSourceProviderTypeHelm   PackageSourceProviderType = "helm"
 )
 
 type PackageSourceProviderAuthType string

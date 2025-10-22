@@ -38,6 +38,8 @@ func (orchestrator *Orchestrator) createProviderClient(provider *configuration.P
 		return NewGitHubProviderClient(provider), nil
 	case configuration.PackageSourceProviderTypeDocker:
 		return NewDockerProviderClient(provider), nil
+	case configuration.PackageSourceProviderTypeHelm:
+		return NewHelmProviderClient(provider), nil
 	default:
 		return nil, fmt.Errorf("unsupported provider type: %s", provider.Type)
 	}

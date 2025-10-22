@@ -81,6 +81,11 @@ func ValidateConfiguration(config *Config) *ValidationResult {
 
 	// Validate package sources
 	sourceNames := make(map[string]bool)
+	providerByName := make(map[string]*PackageSourceProvider)
+	for _, provider := range config.PackageSourceProviders {
+		providerByName[provider.Name] = provider
+	}
+
 	for i, source := range config.PackageSources {
 		fieldPrefix := fmt.Sprintf("packageSources[%d]", i)
 
@@ -95,10 +100,13 @@ func ValidateConfiguration(config *Config) *ValidationResult {
 		}
 
 		// Validate provider reference
+		var provider *PackageSourceProvider
 		if strings.TrimSpace(source.Provider) == "" {
 			result.AddError(fmt.Sprintf("%s.provider", fieldPrefix), "provider reference cannot be empty")
 		} else if !providerNames[source.Provider] {
 			result.AddError(fmt.Sprintf("%s.provider", fieldPrefix), fmt.Sprintf("provider '%s' not found in packageSourceProviders", source.Provider))
+		} else {
+			provider = providerByName[source.Provider]
 		}
 
 		// Validate type
@@ -106,9 +114,27 @@ func ValidateConfiguration(config *Config) *ValidationResult {
 			result.AddError(fmt.Sprintf("%s.type", fieldPrefix), fmt.Sprintf("invalid source type: %s", source.Type))
 		}
 
-		// Validate URI
-		if strings.TrimSpace(source.URI) == "" {
+		// Validate source type and provider type combination
+		if provider != nil {
+			if err := validateSourceProviderCombination(source.Type, provider.Type); err != nil {
+				result.AddError(fmt.Sprintf("%s.type", fieldPrefix), err.Error())
+			}
+		}
+
+		// Validate URI (not required for helm-repository as it uses provider's baseUrl)
+		if source.Type != PackageSourceTypeHelmRepository && strings.TrimSpace(source.URI) == "" {
 			result.AddError(fmt.Sprintf("%s.uri", fieldPrefix), "URI cannot be empty")
+		}
+
+		// Validate helm-repository specific fields
+		if source.Type == PackageSourceTypeHelmRepository {
+			if strings.TrimSpace(source.ChartName) == "" {
+				result.AddError(fmt.Sprintf("%s.chartName", fieldPrefix), "chartName is required for helm-repository source type")
+			}
+			// Validate that the provider has baseUrl configured
+			if provider != nil && strings.TrimSpace(provider.BaseUrl) == "" {
+				result.AddError(fmt.Sprintf("%s.provider", fieldPrefix), fmt.Sprintf("provider '%s' must have baseUrl configured for helm-repository source type", source.Provider))
+			}
 		}
 	}
 
@@ -186,7 +212,8 @@ func isValidProviderType(providerType PackageSourceProviderType) bool {
 	switch providerType {
 	case PackageSourceProviderTypeGitHub,
 		PackageSourceProviderTypeHarbor,
-		PackageSourceProviderTypeDocker:
+		PackageSourceProviderTypeDocker,
+		PackageSourceProviderTypeHelm:
 		return true
 	default:
 		return false
@@ -211,11 +238,31 @@ func isValidSourceType(sourceType PackageSourceType) bool {
 	case PackageSourceTypeGitRelease,
 		PackageSourceTypeGitTag,
 		PackageSourceTypeGitHelmChart,
-		PackageSourceTypeDockerImage:
+		PackageSourceTypeDockerImage,
+		PackageSourceTypeHelmRepository:
 		return true
 	default:
 		return false
 	}
+}
+
+// validateSourceProviderCombination validates that the source type is compatible with the provider type
+func validateSourceProviderCombination(sourceType PackageSourceType, providerType PackageSourceProviderType) error {
+	switch sourceType {
+	case PackageSourceTypeGitRelease, PackageSourceTypeGitTag, PackageSourceTypeGitHelmChart:
+		if providerType != PackageSourceProviderTypeGitHub {
+			return fmt.Errorf("source type '%s' requires provider type 'github', but provider type is '%s'", sourceType, providerType)
+		}
+	case PackageSourceTypeDockerImage:
+		if providerType != PackageSourceProviderTypeDocker && providerType != PackageSourceProviderTypeHarbor {
+			return fmt.Errorf("source type '%s' requires provider type 'docker' or 'harbor', but provider type is '%s'", sourceType, providerType)
+		}
+	case PackageSourceTypeHelmRepository:
+		if providerType != PackageSourceProviderTypeHelm {
+			return fmt.Errorf("source type '%s' requires provider type 'helm', but provider type is '%s'", sourceType, providerType)
+		}
+	}
+	return nil
 }
 
 // isValidTargetType checks if the target type is valid
