@@ -92,10 +92,53 @@ func buildPRTitle(updates []*UpdateItem, group *PatchGroup) string {
 func buildPRBody(updates []*UpdateItem, group *PatchGroup) string {
 	var sb strings.Builder
 
-	sb.WriteString("## Updates\n\n")
-	sb.WriteString("This PR contains the following dependency updates:\n\n")
+	// Count update types
+	hasMajor := false
+	hasMinor := false
+	hasPatch := false
+	majorCount := 0
+	minorCount := 0
+	patchCount := 0
 
-	sb.WriteString("| Dependency | Current | Latest | Type |\n")
+	for _, update := range updates {
+		switch update.UpdateType {
+		case "major":
+			hasMajor = true
+			majorCount++
+		case "minor":
+			hasMinor = true
+			minorCount++
+		case "patch":
+			hasPatch = true
+			patchCount++
+		}
+	}
+
+	sb.WriteString("## Updates\n\n")
+
+	// Add update type summary
+	updateTypes := []string{}
+	if hasMajor {
+		updateTypes = append(updateTypes, fmt.Sprintf("**%d major**", majorCount))
+	}
+	if hasMinor {
+		updateTypes = append(updateTypes, fmt.Sprintf("%d minor", minorCount))
+	}
+	if hasPatch {
+		updateTypes = append(updateTypes, fmt.Sprintf("%d patch", patchCount))
+	}
+
+	if len(updateTypes) > 0 {
+		sb.WriteString(fmt.Sprintf("This PR contains %s update(s).\n\n", strings.Join(updateTypes, ", ")))
+	}
+
+	// Add warning for major updates
+	if hasMajor {
+		sb.WriteString("⚠️ **Warning: This PR includes major version updates which may contain breaking changes.**\n")
+		sb.WriteString("Please review the changelog and test thoroughly before merging.\n\n")
+	}
+
+	sb.WriteString("| Item | Current | Latest | Type |\n")
 	sb.WriteString("|------------|---------|--------|------|\n")
 
 	for _, update := range updates {
@@ -103,11 +146,23 @@ func buildPRBody(updates []*UpdateItem, group *PatchGroup) string {
 		if update.ItemName != "" {
 			displayName = update.ItemName
 		}
+		
+		// Add emoji indicator for update type
+		typeDisplay := string(update.UpdateType)
+		switch update.UpdateType {
+		case "major":
+			typeDisplay = "🔴 " + typeDisplay
+		case "minor":
+			typeDisplay = "🟡 " + typeDisplay
+		case "patch":
+			typeDisplay = "🟢 " + typeDisplay
+		}
+		
 		sb.WriteString(fmt.Sprintf("| %s | `%s` | `%s` | %s |\n",
 			displayName,
 			update.CurrentVersion,
 			update.LatestVersion,
-			update.UpdateType))
+			typeDisplay))
 	}
 
 	sb.WriteString("\n---\n")

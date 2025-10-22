@@ -37,10 +37,25 @@ func buildUpdateItems(config *configuration.Config, results []*compare.Compariso
 		// Merge labels (target labels + item labels)
 		labels := mergeLabels(targetConfig.Labels, updateItemConfig.Labels)
 
+		// Determine item name to display (priority: TerraformVariableName > Name > SourceName)
+		itemName := updateItemConfig.TerraformVariableName
+		if itemName == "" {
+			itemName = updateItemConfig.Name
+		}
+		if itemName == "" {
+			// Find the source to get its name as fallback
+			for _, source := range config.PackageSources {
+				if source.Name == result.SourceName {
+					itemName = source.Name
+					break
+				}
+			}
+		}
+
 		item := &UpdateItem{
 			TargetName:     result.TargetName,
 			TargetFile:     result.TargetFile,
-			ItemName:       updateItemConfig.Name,
+			ItemName:       itemName,
 			SourceName:     result.SourceName,
 			CurrentVersion: result.CurrentVersion,
 			LatestVersion:  result.LatestVersion,
