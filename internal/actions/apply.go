@@ -223,7 +223,7 @@ func groupUpdatesByPatchGroup(items []*UpdateItem) []*PatchGroup {
 // outputDryRunPlan outputs the plan in dry-run mode
 func outputDryRunPlan(groups []*PatchGroup) {
 	fmt.Println("\n🔍 DRY RUN - Apply Plan")
-	fmt.Println("========================\n")
+	fmt.Println("========================")
 
 	totalCommits := 0
 	totalPRs := len(groups)
@@ -284,7 +284,7 @@ func outputDryRunPlan(groups []*PatchGroup) {
 // outputApplyPlan outputs the plan for actual execution
 func outputApplyPlan(groups []*PatchGroup) {
 	fmt.Println("\n🚀 Apply Plan")
-	fmt.Println("=============\n")
+	fmt.Println("=============")
 
 	for i, group := range groups {
 		fmt.Printf("📦 Patch Group %d/%d: %s\n", i+1, len(groups), group.Name)

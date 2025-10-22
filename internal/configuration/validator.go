@@ -156,6 +156,28 @@ func ValidateConfiguration(config *Config) *ValidationResult {
 		}
 	}
 
+	// Validate targetActor (optional but if present, must have required fields)
+	if config.TargetActor != nil {
+		fieldPrefix := "targetActor"
+
+		// Validate name
+		if strings.TrimSpace(config.TargetActor.Name) == "" {
+			result.AddError(fmt.Sprintf("%s.name", fieldPrefix), "targetActor name cannot be empty")
+		}
+
+		// Validate email
+		if strings.TrimSpace(config.TargetActor.Email) == "" {
+			result.AddError(fmt.Sprintf("%s.email", fieldPrefix), "targetActor email cannot be empty")
+		}
+
+		// Validate username
+		if strings.TrimSpace(config.TargetActor.Username) == "" {
+			result.AddError(fmt.Sprintf("%s.username", fieldPrefix), "targetActor username cannot be empty")
+		}
+
+		// Token is optional, so no validation needed
+	}
+
 	return result
 }
 

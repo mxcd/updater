@@ -4,6 +4,7 @@ type Config struct {
 	PackageSourceProviders []*PackageSourceProvider `yaml:"packageSourceProviders"`
 	PackageSources         []*PackageSource         `yaml:"packageSources"`
 	Targets                []*Target                `yaml:"targets"`
+	TargetActor            *TargetActor             `yaml:"targetActor,omitempty"`
 }
 
 type PackageSourceType string
@@ -85,4 +86,11 @@ type TargetItem struct {
 	Source                string   `yaml:"source"`
 	PatchGroup            string   `yaml:"patchGroup,omitempty"`
 	Labels                []string `yaml:"labels,omitempty"`
+}
+
+type TargetActor struct {
+	Name     string `yaml:"name"`
+	Email    string `yaml:"email"`
+	Username string `yaml:"username"`
+	Token    string `yaml:"token,omitempty"`
 }

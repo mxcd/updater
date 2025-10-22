@@ -141,6 +141,13 @@ func (ctx *SubstitutionContext) SubstituteInConfig(config *Config) error {
 		}
 	}
 
+	// Substitute in targetActor
+	if config.TargetActor != nil {
+		if err := ctx.substituteInTargetActor(config.TargetActor); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -192,6 +199,40 @@ func (ctx *SubstitutionContext) substituteInSource(source *PackageSource) error 
 		source.VersionConstraint, err = ctx.SubstituteVariables(source.VersionConstraint)
 		if err != nil {
 			return fmt.Errorf("failed to substitute VersionConstraint in source %s: %w", source.Name, err)
+		}
+	}
+
+	return nil
+}
+
+func (ctx *SubstitutionContext) substituteInTargetActor(targetActor *TargetActor) error {
+	var err error
+
+	if targetActor.Name != "" {
+		targetActor.Name, err = ctx.SubstituteVariables(targetActor.Name)
+		if err != nil {
+			return fmt.Errorf("failed to substitute Name in targetActor: %w", err)
+		}
+	}
+
+	if targetActor.Email != "" {
+		targetActor.Email, err = ctx.SubstituteVariables(targetActor.Email)
+		if err != nil {
+			return fmt.Errorf("failed to substitute Email in targetActor: %w", err)
+		}
+	}
+
+	if targetActor.Username != "" {
+		targetActor.Username, err = ctx.SubstituteVariables(targetActor.Username)
+		if err != nil {
+			return fmt.Errorf("failed to substitute Username in targetActor: %w", err)
+		}
+	}
+
+	if targetActor.Token != "" {
+		targetActor.Token, err = ctx.SubstituteVariables(targetActor.Token)
+		if err != nil {
+			return fmt.Errorf("failed to substitute Token in targetActor: %w", err)
 		}
 	}
 
