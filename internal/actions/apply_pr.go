@@ -99,8 +99,12 @@ func buildPRBody(updates []*UpdateItem, group *PatchGroup) string {
 	sb.WriteString("|------------|---------|--------|------|\n")
 
 	for _, update := range updates {
+		displayName := update.TargetName
+		if update.ItemName != "" {
+			displayName = update.ItemName
+		}
 		sb.WriteString(fmt.Sprintf("| %s | `%s` | `%s` | %s |\n",
-			update.ItemName,
+			displayName,
 			update.CurrentVersion,
 			update.LatestVersion,
 			update.UpdateType))
