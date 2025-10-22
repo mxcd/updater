@@ -133,7 +133,7 @@ func (t *TerraformVariableTarget) WriteVersion(version string) error {
 	// Update internal state
 	t.fileContents = newContents
 
-	log.Info().
+	log.Debug().
 		Str("file", t.config.File).
 		Str("variable", t.updateItem.TerraformVariableName).
 		Str("version", version).

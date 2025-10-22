@@ -1,0 +1,224 @@
+package actions
+
+import (
+	"fmt"
+	"path/filepath"
+
+	"github.com/mxcd/updater/internal/configuration"
+	"github.com/mxcd/updater/internal/git"
+	"github.com/mxcd/updater/internal/target"
+	"github.com/rs/zerolog/log"
+)
+
+// applyPatchGroups applies all patch groups
+func applyPatchGroups(config *configuration.Config, patchGroups []*PatchGroup) error {
+	log.Debug().Int("groups", len(patchGroups)).Msg("Applying patch groups")
+
+	for i, group := range patchGroups {
+		fmt.Printf("\n📦 Processing Patch Group %d/%d: %s\n", i+1, len(patchGroups), group.Name)
+
+		if err := applyPatchGroup(config, group); err != nil {
+			return fmt.Errorf("failed to apply patch group %s: %w", group.Name, err)
+		}
+
+		fmt.Printf("✅ Completed patch group: %s\n", group.Name)
+	}
+
+	return nil
+}
+
+// applyPatchGroup applies a single patch group
+func applyPatchGroup(config *configuration.Config, group *PatchGroup) error {
+	// Group updates by file
+	fileGroups := groupUpdatesByFile(group.Updates)
+
+	// Process each file separately
+	for filePath, updates := range fileGroups {
+		if err := applyFileUpdates(config, filePath, updates, group); err != nil {
+			return fmt.Errorf("failed to apply updates to file %s: %w", filePath, err)
+		}
+	}
+
+	return nil
+}
+
+// applyFileUpdates applies updates to a single file
+func applyFileUpdates(config *configuration.Config, filePath string, updates []*UpdateItem, group *PatchGroup) error {
+	log.Debug().
+		Str("file", filePath).
+		Int("updates", len(updates)).
+		Msg("Applying updates to file")
+
+	// Create repository instance
+	repo := git.NewRepository("", config.TargetActor)
+
+	// Detect git repository from file path
+	if err := repo.DetectRepository(filePath); err != nil {
+		return fmt.Errorf("failed to detect git repository: %w", err)
+	}
+
+	// Create branch name using format: chore/update/<patchGroup>
+	branchName := fmt.Sprintf("chore/update/%s", group.Name)
+
+	// Check if branch already exists (reuse existing PR)
+	branchExists, err := repo.CheckoutOrCreateBranch(branchName)
+	if err != nil {
+		return fmt.Errorf("failed to checkout or create branch: %w", err)
+	}
+
+	if branchExists {
+		fmt.Printf("  🔄 Reusing existing branch: %s\n", branchName)
+	} else {
+		fmt.Printf("  📝 Created new branch: %s\n", branchName)
+	}
+
+	// Check for uncommitted changes from a previous run
+	hasUncommitted, err := repo.HasUncommittedChanges()
+	if err != nil {
+		return fmt.Errorf("failed to check for uncommitted changes: %w", err)
+	}
+
+	if hasUncommitted && branchExists {
+		fmt.Printf("  ⚠️  Found uncommitted changes from previous run, will include them\n")
+	}
+
+	// Apply each update to the file
+	for _, update := range updates {
+		if err := applyUpdate(config, update); err != nil {
+			return fmt.Errorf("failed to apply update for %s: %w", update.ItemName, err)
+		}
+
+		fmt.Printf("  ✓ Updated %s: %s → %s\n",
+			update.ItemName,
+			update.CurrentVersion,
+			update.LatestVersion)
+	}
+
+	// Get relative path for commit
+	relPath, err := filepath.Rel(repo.WorkingDirectory, filePath)
+	if err != nil {
+		relPath = filePath
+	}
+
+	// Create commit message
+	commitMessage := buildCommitMessage(updates, group)
+
+	// Check if there are changes to commit
+	hasChanges, err := repo.HasUncommittedChanges()
+	if err != nil {
+		return fmt.Errorf("failed to check for changes: %w", err)
+	}
+
+	var needsPush bool
+	if hasChanges {
+		// Commit changes
+		commitOptions := &git.CommitOptions{
+			Message: commitMessage,
+			Files:   []string{relPath},
+		}
+
+		if err := repo.Commit(commitOptions); err != nil {
+			return fmt.Errorf("failed to commit changes: %w", err)
+		}
+
+		fmt.Printf("  📝 Created commit: %s\n", commitMessage)
+		needsPush = true
+	} else {
+		fmt.Printf("  ℹ️  No new changes to commit\n")
+
+		// Check if there are unpushed commits from a previous run
+		hasUnpushed, err := repo.HasUnpushedCommits()
+		if err != nil {
+			return fmt.Errorf("failed to check for unpushed commits: %w", err)
+		}
+
+		if hasUnpushed {
+			fmt.Printf("  📦 Found unpushed commits from previous run\n")
+			lastCommit, _ := repo.GetLastCommitMessage()
+			if lastCommit != "" {
+				fmt.Printf("  📝 Last commit: %s\n", lastCommit)
+			}
+			needsPush = true
+		}
+	}
+
+	// Push branch if needed
+	if needsPush {
+		if branchExists {
+			if err := repo.ForcePush(); err != nil {
+				return fmt.Errorf("failed to force push branch: %w", err)
+			}
+			fmt.Printf("  📤 Force pushed branch to remote\n")
+		} else {
+			if err := repo.Push(); err != nil {
+				return fmt.Errorf("failed to push branch: %w", err)
+			}
+			fmt.Printf("  📤 Pushed branch to remote\n")
+		}
+	} else {
+		fmt.Printf("  ℹ️  Branch already up to date on remote\n")
+	}
+
+	// Create or update pull request
+	prURL, err := createOrUpdatePullRequest(repo, config.TargetActor, group, updates, branchExists)
+	if err != nil {
+		return fmt.Errorf("failed to create or update pull request: %w", err)
+	}
+
+	if branchExists {
+		fmt.Printf("  🔄 Updated pull request: %s\n", prURL)
+	} else {
+		fmt.Printf("  🔀 Created pull request: %s\n", prURL)
+	}
+
+	// Checkout back to the base branch
+	if err := repo.CheckoutBranch(repo.BaseBranch); err != nil {
+		log.Warn().Err(err).Str("branch", repo.BaseBranch).Msg("Failed to checkout base branch")
+		fmt.Printf("  ⚠️  Warning: Could not checkout back to %s: %v\n", repo.BaseBranch, err)
+	} else {
+		fmt.Printf("  ✓ Checked out back to %s\n", repo.BaseBranch)
+	}
+
+	return nil
+}
+
+// applyUpdate applies a single update to a target
+func applyUpdate(config *configuration.Config, update *UpdateItem) error {
+	// Find the target and item configuration
+	targetConfig, updateItemConfig := findTargetAndItemByFile(config, update.TargetFile, update.SourceName)
+	if targetConfig == nil || updateItemConfig == nil {
+		return fmt.Errorf("could not find target configuration for %s", update.TargetFile)
+	}
+
+	// Create target factory
+	targetFactory := target.NewTargetFactory(config)
+
+	// Create target client for the specific update item
+	targetClient, err := targetFactory.CreateTargetForUpdateItem(targetConfig, updateItemConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create target client: %w", err)
+	}
+
+	// Write new version
+	if err := targetClient.WriteVersion(update.LatestVersion); err != nil {
+		return fmt.Errorf("failed to write version: %w", err)
+	}
+
+	return nil
+}
+
+// findTargetAndItemByFile finds target and item configuration by file path and source
+func findTargetAndItemByFile(config *configuration.Config, filePath string, sourceName string) (*configuration.Target, *configuration.TargetItem) {
+	for _, target := range config.Targets {
+		if target.File != filePath {
+			continue
+		}
+
+		for _, item := range target.Items {
+			if item.Source == sourceName {
+				return target, &item
+			}
+		}
+	}
+	return nil, nil
+}

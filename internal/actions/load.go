@@ -40,7 +40,7 @@ func Load(options *LoadOptions) error {
 		return fmt.Errorf("configuration validation failed")
 	}
 
-	log.Info().Msg("Configuration is valid")
+	log.Debug().Msg("Configuration is valid")
 
 	// Create orchestrator
 	orchestrator, err := scraper.NewOrchestrator(config)

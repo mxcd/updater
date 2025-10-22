@@ -47,7 +47,7 @@ func Compare(options *CompareOptions) (*CompareResult, error) {
 		return nil, fmt.Errorf("configuration validation failed")
 	}
 
-	log.Info().Msg("Configuration is valid")
+	log.Debug().Msg("Configuration is valid")
 
 	// Create orchestrator and scrape sources
 	orchestrator, err := scraper.NewOrchestrator(config)

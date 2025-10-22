@@ -41,7 +41,7 @@ func Validate(options *ValidateOptions) error {
 		return fmt.Errorf("configuration validation failed")
 	}
 
-	log.Info().Msg("Configuration is valid")
+	log.Debug().Msg("Configuration is valid")
 	return nil
 }
 
