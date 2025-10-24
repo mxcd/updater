@@ -167,7 +167,7 @@ func (r *Repository) CheckoutOrCreateBranch(branchName string) (bool, error) {
 
 		if remoteBranchExists {
 			// Pull latest changes from the remote branch
-			if err := r.pull(); err != nil {
+			if err := r.pullFromRemote(branchName); err != nil {
 				log.Warn().Err(err).Msg("Failed to pull latest changes from remote branch, continuing anyway")
 			}
 			log.Debug().Str("branch", branchName).Msg("Pulled latest changes from remote branch")
@@ -254,7 +254,7 @@ func (r *Repository) CheckoutBranch(branchName string) error {
 	return nil
 }
 
-// pull pulls latest changes from remote
+// pull pulls latest changes from remote for the current branch
 func (r *Repository) pull() error {
 	// Get current branch name
 	currentBranch, err := r.getCurrentBranch()
@@ -262,8 +262,13 @@ func (r *Repository) pull() error {
 		return fmt.Errorf("failed to get current branch: %w", err)
 	}
 
+	return r.pullFromRemote(currentBranch)
+}
+
+// pullFromRemote pulls latest changes from a specific remote branch
+func (r *Repository) pullFromRemote(branchName string) error {
 	// Pull with explicit remote and branch to avoid tracking issues
-	cmd := exec.Command("git", "pull", "origin", currentBranch)
+	cmd := exec.Command("git", "pull", "origin", branchName)
 	cmd.Dir = r.WorkingDirectory
 
 	output, err := cmd.CombinedOutput()
