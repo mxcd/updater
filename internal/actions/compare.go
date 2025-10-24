@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/mxcd/updater/internal/compare"
@@ -149,63 +150,200 @@ func outputComparisonResults(results []*compare.ComparisonResult, format string)
 }
 
 func outputComparisonTable(results []*compare.ComparisonResult) error {
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-	t.SetTitle("🔍 Version Comparison")
-	t.AppendHeader(table.Row{"Target", "Source", "Current", "Latest", "Update Type", "Status"})
+	// Filter out dependency not found errors from wildcard matches
+	// These are expected when some files don't have the dependency
+	filteredResults := filterWildcardDependencyErrors(results)
 
-	for _, result := range results {
-		if result.Error != nil {
-			t.AppendRow(table.Row{
-				result.TargetName,
-				result.SourceName,
-				"-",
-				"-",
-				"-",
-				fmt.Sprintf("❌ Error: %v", result.Error),
-			})
+	// Group results by patch group
+	groupedResults := groupResultsByPatchGroup(filteredResults)
+
+	// Get sorted group names
+	groupNames := make([]string, 0, len(groupedResults))
+	for groupName := range groupedResults {
+		groupNames = append(groupNames, groupName)
+	}
+	// Sort groups: empty group first, then alphabetically
+	sortPatchGroups(groupNames)
+
+	totalUpdates := 0
+	totalErrors := 0
+
+	// Render each group
+	for i, groupName := range groupNames {
+		groupResults := groupedResults[groupName]
+		
+		t := table.NewWriter()
+		t.SetOutputMirror(os.Stdout)
+		
+		// Set title based on whether this is a named group or not
+		if groupName == "" {
+			t.SetTitle("🔍 Version Comparison")
 		} else {
-			status := "✅ Up to date"
-			if result.NeedsUpdate {
-				status = fmt.Sprintf("🔄 Update available (%s)", result.UpdateType)
+			t.SetTitle(fmt.Sprintf("🔍 Version Comparison - Patch Group: %s", groupName))
+		}
+		
+		t.AppendHeader(table.Row{"File / Variable", "Source", "Current", "Latest", "Update Type", "Status"})
+
+		groupUpdates := 0
+		groupErrors := 0
+
+		for _, result := range groupResults {
+			// Build the first column based on target type
+			var firstColumn string
+			if result.TargetItemName != "" {
+				// Show file path and item name (variable/subchart)
+				firstColumn = fmt.Sprintf("%s\n  → %s", result.TargetFile, result.TargetItemName)
+			} else {
+				// Fallback to target name if no item name
+				firstColumn = result.TargetName
 			}
 
-			t.AppendRow(table.Row{
-				result.TargetName,
-				result.SourceName,
-				result.CurrentVersion,
-				result.LatestVersion,
-				result.UpdateType,
-				status,
-			})
+			if result.Error != nil {
+				groupErrors++
+				t.AppendRow(table.Row{
+					firstColumn,
+					result.SourceName,
+					"-",
+					"-",
+					"-",
+					fmt.Sprintf("❌ Error: %v", result.Error),
+				})
+			} else {
+				status := "✅ Up to date"
+				if result.NeedsUpdate {
+					groupUpdates++
+					status = fmt.Sprintf("🔄 Update available (%s)", result.UpdateType)
+				}
+
+				t.AppendRow(table.Row{
+					firstColumn,
+					result.SourceName,
+					result.CurrentVersion,
+					result.LatestVersion,
+					result.UpdateType,
+					status,
+				})
+			}
 		}
+
+		t.SetStyle(table.StyleRounded)
+		t.Render()
+		
+		// Group summary
+		if groupErrors > 0 || groupUpdates > 0 {
+			fmt.Print("  ")
+			if groupErrors > 0 {
+				fmt.Printf("⚠️  %d error(s)  ", groupErrors)
+			}
+			if groupUpdates > 0 {
+				fmt.Printf("🔄 %d update(s)", groupUpdates)
+			}
+			fmt.Println()
+		}
+		
+		// Add spacing between groups
+		if i < len(groupNames)-1 {
+			fmt.Println()
+		}
+
+		totalUpdates += groupUpdates
+		totalErrors += groupErrors
 	}
 
-	t.SetStyle(table.StyleRounded)
-	t.Render()
 	fmt.Println()
 
-	// Summary
-	updatesCount := 0
-	errorsCount := 0
-	for _, r := range results {
-		if r.Error != nil {
-			errorsCount++
-		} else if r.NeedsUpdate {
-			updatesCount++
-		}
+	// Overall summary
+	if totalErrors > 0 {
+		fmt.Printf("⚠️  Total: %d target(s) with errors\n", totalErrors)
 	}
-
-	if errorsCount > 0 {
-		fmt.Printf("⚠️  %d target(s) with errors\n", errorsCount)
-	}
-	if updatesCount > 0 {
-		fmt.Printf("🔄 %d target(s) need updating\n", updatesCount)
+	if totalUpdates > 0 {
+		fmt.Printf("🔄 Total: %d target(s) need updating\n", totalUpdates)
 	} else {
 		fmt.Println("✅ All targets are up to date")
 	}
 
 	return nil
+}
+
+// groupResultsByPatchGroup groups comparison results by their patch group
+func groupResultsByPatchGroup(results []*compare.ComparisonResult) map[string][]*compare.ComparisonResult {
+	grouped := make(map[string][]*compare.ComparisonResult)
+	for _, result := range results {
+		groupName := result.PatchGroup
+		grouped[groupName] = append(grouped[groupName], result)
+	}
+	return grouped
+}
+
+// sortPatchGroups sorts patch group names with empty string first, then alphabetically
+func sortPatchGroups(groups []string) {
+	// Simple bubble sort - good enough for small lists
+	for i := 0; i < len(groups)-1; i++ {
+		for j := i + 1; j < len(groups); j++ {
+			// Empty string comes first
+			if groups[i] != "" && groups[j] == "" {
+				groups[i], groups[j] = groups[j], groups[i]
+			} else if groups[i] != "" && groups[j] != "" && groups[i] > groups[j] {
+				// Alphabetical order for non-empty strings
+				groups[i], groups[j] = groups[j], groups[i]
+			}
+		}
+	}
+}
+
+// filterWildcardDependencyErrors filters out "dependency not found" errors from wildcard matches
+// These errors are expected when using wildcards where not all files contain the specified dependency
+func filterWildcardDependencyErrors(results []*compare.ComparisonResult) []*compare.ComparisonResult {
+	// Group results by wildcard pattern and item name
+	wildcardGroups := make(map[string][]*compare.ComparisonResult)
+	nonWildcardResults := make([]*compare.ComparisonResult, 0)
+
+	for _, result := range results {
+		if result.IsWildcardMatch {
+			key := result.WildcardPattern + "|" + result.TargetItemName
+			wildcardGroups[key] = append(wildcardGroups[key], result)
+		} else {
+			nonWildcardResults = append(nonWildcardResults, result)
+		}
+	}
+
+	// Process wildcard groups
+	filteredResults := make([]*compare.ComparisonResult, 0, len(results))
+	for _, group := range wildcardGroups {
+		// Check if at least one result in the group is successful or has a different error
+		hasValidResult := false
+		for _, result := range group {
+			if result.Error == nil || !isDependencyNotFoundError(result.Error) {
+				hasValidResult = true
+				break
+			}
+		}
+
+		// If we have at least one valid result, only include non-dependency-not-found results
+		for _, result := range group {
+			if hasValidResult {
+				// Skip dependency not found errors since we have valid results
+				if result.Error != nil && isDependencyNotFoundError(result.Error) {
+					continue
+				}
+			}
+			filteredResults = append(filteredResults, result)
+		}
+	}
+
+	// Add all non-wildcard results
+	filteredResults = append(filteredResults, nonWildcardResults...)
+
+	return filteredResults
+}
+
+// isDependencyNotFoundError checks if an error is a "dependency not found" error
+func isDependencyNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "dependency") && strings.Contains(errStr, "not found")
 }
 
 func outputComparisonJSON(results []*compare.ComparisonResult) error {

@@ -72,20 +72,24 @@ type TargetType string
 
 const (
 	TargetTypeTerraformVariable TargetType = "terraform-variable"
+	TargetTypeSubchart          TargetType = "subchart"
 )
 
 type Target struct {
-	Name       string       `yaml:"name"`
-	Type       TargetType   `yaml:"type"`
-	File       string       `yaml:"file"`
-	Items      []TargetItem `yaml:"items"`
-	PatchGroup string       `yaml:"patchGroup,omitempty"`
-	Labels     []string     `yaml:"labels,omitempty"`
+	Name            string       `yaml:"name"`
+	Type            TargetType   `yaml:"type"`
+	File            string       `yaml:"file"`
+	Items           []TargetItem `yaml:"items"`
+	PatchGroup      string       `yaml:"patchGroup,omitempty"`
+	Labels          []string     `yaml:"labels,omitempty"`
+	WildcardPattern string       `yaml:"-"` // Original pattern if expanded from wildcard
+	IsWildcardMatch bool         `yaml:"-"` // Flag indicating this was expanded from wildcard
 }
 
 type TargetItem struct {
 	Name                  string   `yaml:"name,omitempty"`
 	TerraformVariableName string   `yaml:"terraformVariableName,omitempty"`
+	SubchartName          string   `yaml:"subchartName,omitempty"`
 	Source                string   `yaml:"source"`
 	PatchGroup            string   `yaml:"patchGroup,omitempty"`
 	Labels                []string `yaml:"labels,omitempty"`

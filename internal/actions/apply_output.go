@@ -31,7 +31,53 @@ func outputDryRunPlan(groups []*PatchGroup) {
 		t.SetOutputMirror(os.Stdout)
 		t.AppendHeader(table.Row{"Target", "File", "Source", "Current", "→", "Latest", "Type"})
 
+		// Group updates by wildcard pattern
+		wildcardGroups := make(map[string][]*UpdateItem)
+		nonWildcardUpdates := make([]*UpdateItem, 0)
+		
 		for _, update := range group.Updates {
+			if update.IsWildcardMatch && update.WildcardPattern != "" {
+				wildcardGroups[update.WildcardPattern] = append(wildcardGroups[update.WildcardPattern], update)
+			} else {
+				nonWildcardUpdates = append(nonWildcardUpdates, update)
+			}
+		}
+
+		// Display wildcard groups first
+		for pattern, groupUpdates := range wildcardGroups {
+			// Group header row
+			t.AppendRow(table.Row{
+				fmt.Sprintf("📦 Wildcard: %s", pattern),
+				fmt.Sprintf("(%d files)", len(groupUpdates)),
+				"",
+				"",
+				"",
+				"",
+				"",
+			})
+			
+			// Individual files in the group
+			for _, update := range groupUpdates {
+				displayName := update.TargetName
+				if update.ItemName != "" {
+					displayName = update.ItemName
+				}
+
+				t.AppendRow(table.Row{
+					"  ↳ " + displayName,
+					update.TargetFile,
+					update.SourceName,
+					update.CurrentVersion,
+					"→",
+					update.LatestVersion,
+					update.UpdateType,
+				})
+			}
+			t.AppendSeparator()
+		}
+
+		// Display non-wildcard updates
+		for _, update := range nonWildcardUpdates {
 			displayName := update.TargetName
 			if update.ItemName != "" {
 				displayName = update.ItemName
@@ -84,7 +130,51 @@ func outputApplyPlan(groups []*PatchGroup) {
 		t.SetOutputMirror(os.Stdout)
 		t.AppendHeader(table.Row{"Target", "File", "Current", "→", "Latest", "Type"})
 
+		// Group updates by wildcard pattern
+		wildcardGroups := make(map[string][]*UpdateItem)
+		nonWildcardUpdates := make([]*UpdateItem, 0)
+		
 		for _, update := range group.Updates {
+			if update.IsWildcardMatch && update.WildcardPattern != "" {
+				wildcardGroups[update.WildcardPattern] = append(wildcardGroups[update.WildcardPattern], update)
+			} else {
+				nonWildcardUpdates = append(nonWildcardUpdates, update)
+			}
+		}
+
+		// Display wildcard groups first
+		for pattern, groupUpdates := range wildcardGroups {
+			// Group header row
+			t.AppendRow(table.Row{
+				fmt.Sprintf("📦 Wildcard: %s", pattern),
+				fmt.Sprintf("(%d files)", len(groupUpdates)),
+				"",
+				"",
+				"",
+				"",
+			})
+			
+			// Individual files in the group
+			for _, update := range groupUpdates {
+				displayName := update.TargetName
+				if update.ItemName != "" {
+					displayName = update.ItemName
+				}
+
+				t.AppendRow(table.Row{
+					"  ↳ " + displayName,
+					update.TargetFile,
+					update.CurrentVersion,
+					"→",
+					update.LatestVersion,
+					update.UpdateType,
+				})
+			}
+			t.AppendSeparator()
+		}
+
+		// Display non-wildcard updates
+		for _, update := range nonWildcardUpdates {
 			displayName := update.TargetName
 			if update.ItemName != "" {
 				displayName = update.ItemName

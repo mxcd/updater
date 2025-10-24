@@ -43,3 +43,13 @@ type InvalidFileFormatError struct {
 func (e *InvalidFileFormatError) Error() string {
 	return fmt.Sprintf("invalid file format '%s': %s", e.File, e.Reason)
 }
+
+// DependencyNotFoundError is returned when a dependency is not found in the Chart.yaml file
+type DependencyNotFoundError struct {
+	Dependency string
+	File       string
+}
+
+func (e *DependencyNotFoundError) Error() string {
+	return fmt.Sprintf("dependency '%s' not found in file: %s", e.Dependency, e.File)
+}

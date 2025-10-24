@@ -50,8 +50,8 @@ func main() {
 					&cli.StringFlag{
 						Name:    "config",
 						Aliases: []string{"c"},
-						Usage:   "Path to configuration file",
-						Value:   ".updaterconfig.yml",
+						Usage:   "Path to configuration file or directory",
+						Value:   ".updater",
 						Sources: cli.EnvVars("UPDATER_CONFIG"),
 					},
 					&cli.StringFlag{
@@ -74,8 +74,8 @@ func main() {
 					&cli.StringFlag{
 						Name:    "config",
 						Aliases: []string{"c"},
-						Usage:   "Path to configuration file",
-						Value:   ".updaterconfig.yml",
+						Usage:   "Path to configuration file or directory",
+						Value:   ".updater",
 						Sources: cli.EnvVars("UPDATER_CONFIG"),
 					},
 					&cli.StringFlag{
@@ -98,8 +98,8 @@ func main() {
 					&cli.StringFlag{
 						Name:    "config",
 						Aliases: []string{"c"},
-						Usage:   "Path to configuration file",
-						Value:   ".updaterconfig.yml",
+						Usage:   "Path to configuration file or directory",
+						Value:   ".updater",
 						Sources: cli.EnvVars("UPDATER_CONFIG"),
 					},
 					&cli.StringFlag{
@@ -127,8 +127,8 @@ func main() {
 					&cli.StringFlag{
 						Name:    "config",
 						Aliases: []string{"c"},
-						Usage:   "Path to configuration file",
-						Value:   ".updaterconfig.yml",
+						Usage:   "Path to configuration file or directory",
+						Value:   ".updater",
 						Sources: cli.EnvVars("UPDATER_CONFIG"),
 					},
 					&cli.StringFlag{

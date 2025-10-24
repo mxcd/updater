@@ -20,13 +20,15 @@ type PatchGroup struct {
 
 // UpdateItem represents a single update to be applied
 type UpdateItem struct {
-	TargetName     string
-	TargetFile     string
-	ItemName       string
-	SourceName     string
-	CurrentVersion string
-	LatestVersion  string
-	UpdateType     compare.UpdateType
-	PatchGroup     string
-	Labels         []string
+	TargetName      string
+	TargetFile      string
+	ItemName        string
+	SourceName      string
+	CurrentVersion  string
+	LatestVersion   string
+	UpdateType      compare.UpdateType
+	PatchGroup      string
+	Labels          []string
+	WildcardPattern string // Original wildcard pattern if this target was expanded
+	IsWildcardMatch bool   // Flag indicating if this came from a wildcard expansion
 }

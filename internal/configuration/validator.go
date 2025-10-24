@@ -178,6 +178,10 @@ func ValidateConfiguration(config *Config) *ValidationResult {
 				if strings.TrimSpace(item.TerraformVariableName) == "" {
 					result.AddError(fmt.Sprintf("%s.terraformVariableName", itemPrefix), "terraformVariableName is required for terraform-variable target")
 				}
+			case TargetTypeSubchart:
+				if strings.TrimSpace(item.SubchartName) == "" {
+					result.AddError(fmt.Sprintf("%s.subchartName", itemPrefix), "subchartName is required for subchart target")
+				}
 			}
 		}
 	}
@@ -268,7 +272,8 @@ func validateSourceProviderCombination(sourceType PackageSourceType, providerTyp
 // isValidTargetType checks if the target type is valid
 func isValidTargetType(targetType TargetType) bool {
 	switch targetType {
-	case TargetTypeTerraformVariable:
+	case TargetTypeTerraformVariable,
+		TargetTypeSubchart:
 		return true
 	default:
 		return false

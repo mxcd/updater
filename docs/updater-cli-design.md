@@ -41,6 +41,13 @@ flowchart TD
 
 ## 4. Configuration Model and Secrets Handling
 - Default config file path: `.updaterconfig.yml`, overridable via `--config` flag or `UPDATER_CONFIG` environment variable.
+- Configuration can be provided as either:
+  - A single YAML file (e.g., `.updaterconfig.yml`)
+  - A directory containing multiple `.yml` or `.yaml` files (e.g., `.updater/` directory). All YAML files in the directory will be loaded and merged automatically. This enables modular configuration where providers, sources, and targets can be organized in separate files.
+- When loading from a directory:
+  - All `.yml` and `.yaml` files are loaded and merged
+  - Duplicate names across files (providers, sources, or targets) will result in a validation error
+  - The `targetActor` configuration, if present in multiple files, will use the last occurrence
 - Supported sections:
   - `packageSourceProviders`: defines provider credentials, auth types, base URLs, and optional metadata.
   - `packageSources`: names, provider references, URIs, source type, optional `versionConstraint`, and cached version metadata.

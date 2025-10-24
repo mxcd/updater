@@ -217,12 +217,12 @@ func TestLoadConfigurationFileErrors(t *testing.T) {
 		{
 			name:        "non-existent file",
 			configPath:  "/nonexistent/path/config.yml",
-			errContains: "failed to read configuration file",
+			errContains: "failed to access configuration path",
 		},
 		{
 			name:        "empty path",
 			configPath:  "",
-			errContains: "failed to read configuration file",
+			errContains: "failed to access configuration path",
 		},
 	}
 
@@ -239,12 +239,284 @@ func TestLoadConfigurationFileErrors(t *testing.T) {
 }
 
 func TestLoadConfigurationWithDirectory(t *testing.T) {
-	tmpDir := t.TempDir()
+	t.Run("directory with multiple yml files", func(t *testing.T) {
+		tmpDir := t.TempDir()
 
-	_, err := LoadConfiguration(tmpDir)
-	if err == nil {
-		t.Error("expected error when loading directory, got nil")
-	}
+		// Create first config file - providers.yml
+		providersContent := `packageSourceProviders:
+  - name: github
+    type: github
+  - name: docker
+    type: docker
+`
+		if err := os.WriteFile(filepath.Join(tmpDir, "providers.yml"), []byte(providersContent), 0644); err != nil {
+			t.Fatalf("failed to write providers.yml: %v", err)
+		}
+
+		// Create second config file - sources.yml
+		sourcesContent := `packageSources:
+  - name: app1
+    provider: github
+    type: git-release
+    uri: https://github.com/example/app1
+  - name: app2
+    provider: docker
+    type: docker-image
+    uri: registry.example.com/app2
+`
+		if err := os.WriteFile(filepath.Join(tmpDir, "sources.yml"), []byte(sourcesContent), 0644); err != nil {
+			t.Fatalf("failed to write sources.yml: %v", err)
+		}
+
+		// Create third config file - targets.yml
+		targetsContent := `targets:
+  - name: target1
+    type: terraform-variable
+    file: vars.tf
+    items:
+      - terraformVariableName: app1_version
+        source: app1
+`
+		if err := os.WriteFile(filepath.Join(tmpDir, "targets.yml"), []byte(targetsContent), 0644); err != nil {
+			t.Fatalf("failed to write targets.yml: %v", err)
+		}
+
+		// Load configuration from directory
+		config, err := LoadConfiguration(tmpDir)
+		if err != nil {
+			t.Fatalf("unexpected error loading from directory: %v", err)
+		}
+
+		// Verify merged configuration
+		if len(config.PackageSourceProviders) != 2 {
+			t.Errorf("expected 2 providers, got %d", len(config.PackageSourceProviders))
+		}
+		if len(config.PackageSources) != 2 {
+			t.Errorf("expected 2 sources, got %d", len(config.PackageSources))
+		}
+		if len(config.Targets) != 1 {
+			t.Errorf("expected 1 target, got %d", len(config.Targets))
+		}
+
+		// Verify specific items
+		if config.PackageSourceProviders[0].Name != "github" {
+			t.Errorf("expected first provider to be 'github', got '%s'", config.PackageSourceProviders[0].Name)
+		}
+		if config.PackageSources[0].Name != "app1" {
+			t.Errorf("expected first source to be 'app1', got '%s'", config.PackageSources[0].Name)
+		}
+	})
+
+	t.Run("directory with yaml extension", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create config file with .yaml extension
+		content := `packageSourceProviders:
+  - name: github
+    type: github
+packageSources:
+  - name: test
+    provider: github
+    type: git-release
+    uri: https://github.com/example/test
+`
+		if err := os.WriteFile(filepath.Join(tmpDir, "config.yaml"), []byte(content), 0644); err != nil {
+			t.Fatalf("failed to write config.yaml: %v", err)
+		}
+
+		config, err := LoadConfiguration(tmpDir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(config.PackageSourceProviders) != 1 {
+			t.Errorf("expected 1 provider, got %d", len(config.PackageSourceProviders))
+		}
+	})
+
+	t.Run("directory with duplicate provider names", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create first file with github provider
+		content1 := `packageSourceProviders:
+  - name: github
+    type: github
+`
+		if err := os.WriteFile(filepath.Join(tmpDir, "file1.yml"), []byte(content1), 0644); err != nil {
+			t.Fatalf("failed to write file1.yml: %v", err)
+		}
+
+		// Create second file with duplicate github provider
+		content2 := `packageSourceProviders:
+  - name: github
+    type: github
+    authType: token
+    token: secret
+`
+		if err := os.WriteFile(filepath.Join(tmpDir, "file2.yml"), []byte(content2), 0644); err != nil {
+			t.Fatalf("failed to write file2.yml: %v", err)
+		}
+
+		_, err := LoadConfiguration(tmpDir)
+		if err == nil {
+			t.Error("expected error for duplicate provider name, got nil")
+		} else if !contains(err.Error(), "duplicate package source provider name") {
+			t.Errorf("expected error about duplicate provider name, got: %v", err)
+		}
+	})
+
+	t.Run("directory with duplicate source names", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create first file
+		content1 := `packageSourceProviders:
+  - name: github
+    type: github
+packageSources:
+  - name: app1
+    provider: github
+    type: git-release
+    uri: https://github.com/example/app1
+`
+		if err := os.WriteFile(filepath.Join(tmpDir, "file1.yml"), []byte(content1), 0644); err != nil {
+			t.Fatalf("failed to write file1.yml: %v", err)
+		}
+
+		// Create second file with duplicate source name
+		content2 := `packageSources:
+  - name: app1
+    provider: github
+    type: git-tag
+    uri: https://github.com/example/app1
+`
+		if err := os.WriteFile(filepath.Join(tmpDir, "file2.yml"), []byte(content2), 0644); err != nil {
+			t.Fatalf("failed to write file2.yml: %v", err)
+		}
+
+		_, err := LoadConfiguration(tmpDir)
+		if err == nil {
+			t.Error("expected error for duplicate source name, got nil")
+		} else if !contains(err.Error(), "duplicate package source name") {
+			t.Errorf("expected error about duplicate source name, got: %v", err)
+		}
+	})
+
+	t.Run("directory with duplicate target names", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create provider and source first
+		baseContent := `packageSourceProviders:
+  - name: github
+    type: github
+packageSources:
+  - name: app1
+    provider: github
+    type: git-release
+    uri: https://github.com/example/app1
+`
+		if err := os.WriteFile(filepath.Join(tmpDir, "base.yml"), []byte(baseContent), 0644); err != nil {
+			t.Fatalf("failed to write base.yml: %v", err)
+		}
+
+		// Create first file with target
+		content1 := `targets:
+  - name: target1
+    type: terraform-variable
+    file: vars.tf
+    items:
+      - terraformVariableName: version
+        source: app1
+`
+		if err := os.WriteFile(filepath.Join(tmpDir, "targets1.yml"), []byte(content1), 0644); err != nil {
+			t.Fatalf("failed to write targets1.yml: %v", err)
+		}
+
+		// Create second file with duplicate target name
+		content2 := `targets:
+  - name: target1
+    type: subchart
+    file: Chart.yaml
+    items:
+      - subchartName: subchart1
+        source: app1
+`
+		if err := os.WriteFile(filepath.Join(tmpDir, "targets2.yml"), []byte(content2), 0644); err != nil {
+			t.Fatalf("failed to write targets2.yml: %v", err)
+		}
+
+		_, err := LoadConfiguration(tmpDir)
+		if err == nil {
+			t.Error("expected error for duplicate target name, got nil")
+		} else if !contains(err.Error(), "duplicate target name") {
+			t.Errorf("expected error about duplicate target name, got: %v", err)
+		}
+	})
+
+	t.Run("empty directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		_, err := LoadConfiguration(tmpDir)
+		if err == nil {
+			t.Error("expected error for empty directory, got nil")
+		} else if !contains(err.Error(), "no .yml or .yaml files found") {
+			t.Errorf("expected error about no yml files, got: %v", err)
+		}
+	})
+
+	t.Run("directory with non-yml files only", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create a non-yml file
+		if err := os.WriteFile(filepath.Join(tmpDir, "readme.txt"), []byte("test"), 0644); err != nil {
+			t.Fatalf("failed to write readme.txt: %v", err)
+		}
+
+		_, err := LoadConfiguration(tmpDir)
+		if err == nil {
+			t.Error("expected error for directory with no yml files, got nil")
+		} else if !contains(err.Error(), "no .yml or .yaml files found") {
+			t.Errorf("expected error about no yml files, got: %v", err)
+		}
+	})
+
+	t.Run("directory with targetActor in multiple files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create first file with targetActor
+		content1 := `packageSourceProviders:
+  - name: github
+    type: github
+targetActor:
+  name: First Actor
+  email: first@example.com
+  username: first
+`
+		if err := os.WriteFile(filepath.Join(tmpDir, "file1.yml"), []byte(content1), 0644); err != nil {
+			t.Fatalf("failed to write file1.yml: %v", err)
+		}
+
+		// Create second file with different targetActor (should override)
+		content2 := `targetActor:
+  name: Second Actor
+  email: second@example.com
+  username: second
+`
+		if err := os.WriteFile(filepath.Join(tmpDir, "file2.yml"), []byte(content2), 0644); err != nil {
+			t.Fatalf("failed to write file2.yml: %v", err)
+		}
+
+		config, err := LoadConfiguration(tmpDir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Should use the last non-nil targetActor
+		if config.TargetActor == nil {
+			t.Error("expected targetActor to be set")
+		} else if config.TargetActor.Name != "Second Actor" && config.TargetActor.Name != "First Actor" {
+			t.Errorf("expected targetActor name to be from one of the files, got '%s'", config.TargetActor.Name)
+		}
+	})
 }
 
 // contains checks if a string contains a substring

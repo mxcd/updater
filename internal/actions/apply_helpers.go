@@ -53,15 +53,17 @@ func buildUpdateItems(config *configuration.Config, results []*compare.Compariso
 		}
 
 		item := &UpdateItem{
-			TargetName:     result.TargetName,
-			TargetFile:     result.TargetFile,
-			ItemName:       itemName,
-			SourceName:     result.SourceName,
-			CurrentVersion: result.CurrentVersion,
-			LatestVersion:  result.LatestVersion,
-			UpdateType:     result.UpdateType,
-			PatchGroup:     patchGroup,
-			Labels:         labels,
+			TargetName:      result.TargetName,
+			TargetFile:      result.TargetFile,
+			ItemName:        itemName,
+			SourceName:      result.SourceName,
+			CurrentVersion:  result.CurrentVersion,
+			LatestVersion:   result.LatestVersion,
+			UpdateType:      result.UpdateType,
+			PatchGroup:      patchGroup,
+			Labels:          labels,
+			WildcardPattern: targetConfig.WildcardPattern,
+			IsWildcardMatch: targetConfig.IsWildcardMatch,
 		}
 
 		items = append(items, item)

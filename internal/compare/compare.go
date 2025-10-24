@@ -12,14 +12,19 @@ import (
 
 // ComparisonResult represents the result of comparing a target with its source
 type ComparisonResult struct {
-	TargetName     string
-	TargetFile     string
-	SourceName     string
-	CurrentVersion string
-	LatestVersion  string
-	UpdateType     UpdateType
-	NeedsUpdate    bool
-	Error          error
+	TargetName         string
+	TargetFile         string
+	TargetType         configuration.TargetType
+	TargetItemName     string // Variable name for terraform, subchart name for helm
+	SourceName         string
+	CurrentVersion     string
+	LatestVersion      string
+	UpdateType         UpdateType
+	NeedsUpdate        bool
+	Error              error
+	IsWildcardMatch    bool   // True if this target was expanded from a wildcard pattern
+	WildcardPattern    string // The original wildcard pattern if IsWildcardMatch is true
+	PatchGroup         string // Patch group for grouping updates together
 }
 
 // UpdateType represents the type of update (major, minor, patch, none)
@@ -76,10 +81,30 @@ func (e *CompareEngine) compareTargetUpdateItem(targetConfig *configuration.Targ
 		targetName = targetConfig.Name
 	}
 
+	// Get target-specific item name (variable name or subchart name)
+	var itemName string
+	switch targetConfig.Type {
+	case configuration.TargetTypeTerraformVariable:
+		itemName = updateItem.TerraformVariableName
+	case configuration.TargetTypeSubchart:
+		itemName = updateItem.SubchartName
+	}
+
+	// Determine patch group - use item's patch group if set, otherwise use target's patch group
+	patchGroup := updateItem.PatchGroup
+	if patchGroup == "" {
+		patchGroup = targetConfig.PatchGroup
+	}
+
 	result := &ComparisonResult{
-		TargetName: targetName,
-		TargetFile: targetConfig.File,
-		SourceName: updateItem.Source,
+		TargetName:      targetName,
+		TargetFile:      targetConfig.File,
+		TargetType:      targetConfig.Type,
+		TargetItemName:  itemName,
+		SourceName:      updateItem.Source,
+		IsWildcardMatch: targetConfig.IsWildcardMatch,
+		WildcardPattern: targetConfig.WildcardPattern,
+		PatchGroup:      patchGroup,
 	}
 
 	log.Debug().
@@ -127,10 +152,22 @@ func (e *CompareEngine) compareTargetUpdateItem(targetConfig *configuration.Targ
 	currentVersion, err := targetClient.ReadCurrentVersion()
 	if err != nil {
 		result.Error = fmt.Errorf("failed to read current version: %w", err)
-		log.Error().
-			Err(err).
-			Str("target", targetName).
-			Msg("Failed to read current version")
+		
+		// For wildcard matches with dependency not found errors, use debug level logging
+		// These are expected when not all files contain the specified dependency
+		errStr := err.Error()
+		if targetConfig.IsWildcardMatch && strings.Contains(errStr, "dependency") && strings.Contains(errStr, "not found") {
+			log.Debug().
+				Err(err).
+				Str("target", targetName).
+				Str("file", targetConfig.File).
+				Msg("Dependency not found in wildcard-matched file (expected)")
+		} else {
+			log.Error().
+				Err(err).
+				Str("target", targetName).
+				Msg("Failed to read current version")
+		}
 		return result
 	}
 	result.CurrentVersion = currentVersion
