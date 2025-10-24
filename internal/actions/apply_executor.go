@@ -32,29 +32,62 @@ func applyPatchGroup(config *configuration.Config, group *PatchGroup) error {
 	// Group updates by file
 	fileGroups := groupUpdatesByFile(group.Updates)
 
+	// Track repository and branch info (should be same for all files in group)
+	var repo *git.Repository
+	var branchExists bool
+	var prURL string
+	
 	// Process each file separately
+	fileIndex := 0
+	totalFiles := len(fileGroups)
 	for filePath, updates := range fileGroups {
-		if err := applyFileUpdates(config, filePath, updates, group); err != nil {
+		fileIndex++
+		isLastFile := fileIndex == totalFiles
+		
+		// Pass whether this is the last file so PR is only created once
+		fileRepo, fileBranchExists, err := applyFileUpdates(config, filePath, updates, group, isLastFile)
+		if err != nil {
 			return fmt.Errorf("failed to apply updates to file %s: %w", filePath, err)
+		}
+		
+		// Store repo and branch info from first file
+		if repo == nil {
+			repo = fileRepo
+			branchExists = fileBranchExists
+		}
+	}
+
+	// Create or update pull request after all files are processed
+	if repo != nil {
+		var err error
+		prURL, err = createOrUpdatePullRequest(repo, config.TargetActor, group, group.Updates, branchExists)
+		if err != nil {
+			return fmt.Errorf("failed to create or update pull request: %w", err)
+		}
+
+		if branchExists {
+			fmt.Printf("  🔄 Updated pull request: %s\n", prURL)
+		} else {
+			fmt.Printf("  🔀 Created pull request: %s\n", prURL)
 		}
 	}
 
 	return nil
 }
 
-// applyFileUpdates applies updates to a single file
-func applyFileUpdates(config *configuration.Config, filePath string, updates []*UpdateItem, group *PatchGroup) (err error) {
+// applyFileUpdates applies updates to a single file and returns the repository and branch status
+func applyFileUpdates(config *configuration.Config, filePath string, updates []*UpdateItem, group *PatchGroup, isLastFile bool) (repo *git.Repository, branchExists bool, err error) {
 	log.Debug().
 		Str("file", filePath).
 		Int("updates", len(updates)).
 		Msg("Applying updates to file")
 
 	// Create repository instance
-	repo := git.NewRepository("", config.TargetActor)
+	repo = git.NewRepository("", config.TargetActor)
 
 	// Detect git repository from file path
-	if err := repo.DetectRepository(filePath); err != nil {
-		return fmt.Errorf("failed to detect git repository: %w", err)
+	if err = repo.DetectRepository(filePath); err != nil {
+		return nil, false, fmt.Errorf("failed to detect git repository: %w", err)
 	}
 
 	// Ensure we always checkout back to the base branch on error
@@ -66,6 +99,14 @@ func applyFileUpdates(config *configuration.Config, filePath string, updates []*
 			} else {
 				fmt.Printf("  ↩️  Reverted to %s due to error\n", repo.BaseBranch)
 			}
+		} else if isLastFile {
+			// Only checkout back to base branch after the last file (and after PR creation)
+			if checkoutErr := repo.CheckoutBranch(repo.BaseBranch); checkoutErr != nil {
+				log.Warn().Err(checkoutErr).Str("branch", repo.BaseBranch).Msg("Failed to checkout base branch")
+				fmt.Printf("  ⚠️  Warning: Could not checkout back to %s: %v\n", repo.BaseBranch, checkoutErr)
+			} else {
+				fmt.Printf("  ✓ Checked out back to %s\n", repo.BaseBranch)
+			}
 		}
 	}()
 
@@ -73,9 +114,9 @@ func applyFileUpdates(config *configuration.Config, filePath string, updates []*
 	branchName := fmt.Sprintf("chore/update/%s", group.Name)
 
 	// Check if branch already exists (reuse existing PR)
-	branchExists, err := repo.CheckoutOrCreateBranch(branchName)
+	branchExists, err = repo.CheckoutOrCreateBranch(branchName)
 	if err != nil {
-		return fmt.Errorf("failed to checkout or create branch: %w", err)
+		return nil, false, fmt.Errorf("failed to checkout or create branch: %w", err)
 	}
 
 	if branchExists {
@@ -87,7 +128,7 @@ func applyFileUpdates(config *configuration.Config, filePath string, updates []*
 	// Check for uncommitted changes from a previous run
 	hasUncommitted, err := repo.HasUncommittedChanges()
 	if err != nil {
-		return fmt.Errorf("failed to check for uncommitted changes: %w", err)
+		return nil, false, fmt.Errorf("failed to check for uncommitted changes: %w", err)
 	}
 
 	if hasUncommitted && branchExists {
@@ -96,8 +137,8 @@ func applyFileUpdates(config *configuration.Config, filePath string, updates []*
 
 	// Apply each update to the file
 	for _, update := range updates {
-		if err := applyUpdate(config, update); err != nil {
-			return fmt.Errorf("failed to apply update for %s: %w", update.ItemName, err)
+		if err = applyUpdate(config, update); err != nil {
+			return nil, false, fmt.Errorf("failed to apply update for %s: %w", update.ItemName, err)
 		}
 
 		fmt.Printf("  ✓ Updated %s: %s → %s\n",
@@ -118,7 +159,7 @@ func applyFileUpdates(config *configuration.Config, filePath string, updates []*
 	// Check if there are changes to commit
 	hasChanges, err := repo.HasUncommittedChanges()
 	if err != nil {
-		return fmt.Errorf("failed to check for changes: %w", err)
+		return nil, false, fmt.Errorf("failed to check for changes: %w", err)
 	}
 
 	var needsPush bool
@@ -129,8 +170,8 @@ func applyFileUpdates(config *configuration.Config, filePath string, updates []*
 			Files:   []string{relPath},
 		}
 
-		if err := repo.Commit(commitOptions); err != nil {
-			return fmt.Errorf("failed to commit changes: %w", err)
+		if err = repo.Commit(commitOptions); err != nil {
+			return nil, false, fmt.Errorf("failed to commit changes: %w", err)
 		}
 
 		fmt.Printf("  📝 Created commit: %s\n", commitMessage)
@@ -141,7 +182,7 @@ func applyFileUpdates(config *configuration.Config, filePath string, updates []*
 		// Check if there are unpushed commits from a previous run
 		hasUnpushed, err := repo.HasUnpushedCommits()
 		if err != nil {
-			return fmt.Errorf("failed to check for unpushed commits: %w", err)
+			return nil, false, fmt.Errorf("failed to check for unpushed commits: %w", err)
 		}
 
 		if hasUnpushed {
@@ -154,37 +195,17 @@ func applyFileUpdates(config *configuration.Config, filePath string, updates []*
 		}
 	}
 
-	// Push branch if needed
-	if needsPush {
-		if err := repo.Push(); err != nil {
-			return fmt.Errorf("failed to push branch: %w", err)
+	// Push branch only if this is the last file (after all commits are made)
+	if isLastFile && needsPush {
+		if err = repo.Push(); err != nil {
+			return nil, false, fmt.Errorf("failed to push branch: %w", err)
 		}
 		fmt.Printf("  📤 Pushed branch to remote\n")
-	} else {
+	} else if isLastFile {
 		fmt.Printf("  ℹ️  Branch already up to date on remote\n")
 	}
 
-	// Create or update pull request
-	prURL, err := createOrUpdatePullRequest(repo, config.TargetActor, group, updates, branchExists)
-	if err != nil {
-		return fmt.Errorf("failed to create or update pull request: %w", err)
-	}
-
-	if branchExists {
-		fmt.Printf("  🔄 Updated pull request: %s\n", prURL)
-	} else {
-		fmt.Printf("  🔀 Created pull request: %s\n", prURL)
-	}
-
-	// Checkout back to the base branch
-	if err := repo.CheckoutBranch(repo.BaseBranch); err != nil {
-		log.Warn().Err(err).Str("branch", repo.BaseBranch).Msg("Failed to checkout base branch")
-		fmt.Printf("  ⚠️  Warning: Could not checkout back to %s: %v\n", repo.BaseBranch, err)
-	} else {
-		fmt.Printf("  ✓ Checked out back to %s\n", repo.BaseBranch)
-	}
-
-	return nil
+	return repo, branchExists, nil
 }
 
 // applyUpdate applies a single update to a target
