@@ -47,14 +47,21 @@ func (r *Repository) DetectRepository(filePath string) error {
 	r.RepoURL = remoteURL
 	log.Debug().Str("remoteURL", remoteURL).Msg("Found remote URL")
 
-	// Get current branch
-	currentBranch, err := r.getCurrentBranch()
+	// Get default branch (main/master) - we need the actual base branch, not the current branch
+	// This ensures that if we're on a feature branch, we still know what the base branch is
+	baseBranch, err := r.getDefaultBranch()
 	if err != nil {
-		return fmt.Errorf("failed to get current branch: %w", err)
+		// Fallback to current branch if we can't determine the default branch
+		log.Warn().Err(err).Msg("Failed to get default branch, using current branch as fallback")
+		currentBranch, err := r.getCurrentBranch()
+		if err != nil {
+			return fmt.Errorf("failed to get current branch: %w", err)
+		}
+		baseBranch = currentBranch
 	}
 
-	r.BaseBranch = currentBranch
-	log.Debug().Str("branch", currentBranch).Msg("Found current branch")
+	r.BaseBranch = baseBranch
+	log.Debug().Str("branch", baseBranch).Msg("Found base branch")
 
 	return nil
 }
@@ -104,6 +111,24 @@ func (r *Repository) getCurrentBranch() (string, error) {
 	}
 
 	return strings.TrimSpace(string(output)), nil
+}
+
+// getDefaultBranch attempts to determine the default branch (main/master)
+func (r *Repository) getDefaultBranch() (string, error) {
+	// Try to get the default branch from the remote
+	cmd := exec.Command("git", "symbolic-ref", "refs/remotes/origin/HEAD")
+	cmd.Dir = r.WorkingDirectory
+
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get default branch: %w", err)
+	}
+
+	// Output format is "refs/remotes/origin/main" or "refs/remotes/origin/master"
+	defaultBranch := strings.TrimSpace(string(output))
+	defaultBranch = strings.TrimPrefix(defaultBranch, "refs/remotes/origin/")
+
+	return defaultBranch, nil
 }
 
 // CreateBranch creates a new branch
@@ -172,9 +197,32 @@ func (r *Repository) CheckoutOrCreateBranch(branchName string) (bool, error) {
 			}
 			log.Debug().Str("branch", branchName).Msg("Pulled latest changes from remote branch")
 		} else {
-			// Remote branch doesn't exist yet - this is a newly created branch
-			// that hasn't been pushed. Just use it as-is.
-			log.Debug().Str("branch", branchName).Msg("Local branch exists but not on remote, using local version")
+			// Remote branch doesn't exist - local branch might be stale or from interrupted run
+			// Delete it and recreate from base branch to ensure clean state
+			log.Debug().Str("branch", branchName).Msg("Local branch exists but not on remote, recreating from base")
+			
+			// Switch back to base branch first
+			if err := r.CheckoutBranch(r.BaseBranch); err != nil {
+				return false, fmt.Errorf("failed to checkout base branch for recreation: %w", err)
+			}
+			
+			// Delete the local branch
+			if err := r.deleteBranch(branchName); err != nil {
+				log.Warn().Err(err).Msg("Failed to delete stale local branch, continuing anyway")
+			}
+			
+			// Create fresh branch from base
+			cmd := exec.Command("git", "checkout", "-b", branchName)
+			cmd.Dir = r.WorkingDirectory
+			
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return false, fmt.Errorf("failed to recreate branch: %w, output: %s", err, string(output))
+			}
+			
+			r.BranchName = branchName
+			log.Debug().Str("branch", branchName).Msg("Recreated branch from base")
+			return false, nil
 		}
 
 		return true, nil
@@ -440,4 +488,18 @@ func (r *Repository) GetLastCommitMessage() (string, error) {
 	}
 
 	return strings.TrimSpace(string(output)), nil
+}
+
+// deleteBranch deletes a local branch
+func (r *Repository) deleteBranch(branchName string) error {
+	cmd := exec.Command("git", "branch", "-D", branchName)
+	cmd.Dir = r.WorkingDirectory
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to delete branch: %w, output: %s", err, string(output))
+	}
+
+	log.Debug().Str("branch", branchName).Msg("Deleted local branch")
+	return nil
 }
