@@ -172,10 +172,9 @@ func (r *Repository) CheckoutOrCreateBranch(branchName string) (bool, error) {
 			}
 			log.Debug().Str("branch", branchName).Msg("Pulled latest changes from remote branch")
 		} else {
-			// Remote branch doesn't exist, reset to base branch to get latest changes
-			if err := r.resetToBaseBranch(); err != nil {
-				log.Warn().Err(err).Msg("Failed to reset branch to base, continuing anyway")
-			}
+			// Remote branch doesn't exist yet - this is a newly created branch
+			// that hasn't been pushed. Just use it as-is.
+			log.Debug().Str("branch", branchName).Msg("Local branch exists but not on remote, using local version")
 		}
 
 		return true, nil
