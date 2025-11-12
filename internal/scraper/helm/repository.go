@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -71,28 +72,80 @@ func scrapeHelmRepository(provider *configuration.PackageSourceProvider, source 
 		return nil, fmt.Errorf("no versions found for chart '%s'", source.ChartName)
 	}
 
-	// Convert to PackageSourceVersion
-	versions := make([]*configuration.PackageSourceVersion, 0, len(chartEntries))
+	// Convert ALL entries to PackageSourceVersion FIRST
+	allVersions := make([]*configuration.PackageSourceVersion, 0, len(chartEntries))
 	for _, entry := range chartEntries {
 		version := convertToPackageSourceVersion(entry)
-		versions = append(versions, version)
+		allVersions = append(allVersions, version)
 	}
 
-	// Sort versions by semantic version (descending)
-	sortVersions(versions)
+	// Sort ALL versions by semantic version (descending) BEFORE filtering
+	sortVersions(allVersions)
+
+	log.Debug().
+		Int("total_versions", len(allVersions)).
+		Msg("sorted all versions")
+
+	// NOW filter the sorted versions based on patterns
+	filteredVersions := filterVersions(allVersions, source)
+
+	log.Debug().
+		Int("filtered_versions", len(filteredVersions)).
+		Int("removed", len(allVersions)-len(filteredVersions)).
+		Msg("filtered versions")
 
 	// Apply limit if specified
+	versions := filteredVersions
 	if opts.Limit > 0 && len(versions) > opts.Limit {
 		versions = versions[:opts.Limit]
 	}
 
 	log.Debug().
+		Int("count", len(versions)).
+		Int("total_fetched", len(chartEntries)).
+		Int("after_filtering", len(filteredVersions)).
+		Int("after_limit", len(versions)).
 		Str("chartName", source.ChartName).
-		Int("totalVersions", len(chartEntries)).
-		Int("returnedVersions", len(versions)).
 		Msg("successfully scraped Helm repository")
 
 	return versions, nil
+}
+
+// filterVersions filters versions based on tagPattern and excludePattern
+func filterVersions(versions []*configuration.PackageSourceVersion, source *configuration.PackageSource) []*configuration.PackageSourceVersion {
+	filtered := make([]*configuration.PackageSourceVersion, 0, len(versions))
+
+	for _, version := range versions {
+		versionString := version.Version
+
+		// Apply tag pattern if specified
+		if source.TagPattern != "" {
+			matched, err := regexp.MatchString(source.TagPattern, versionString)
+			if err != nil {
+				log.Warn().Err(err).Str("pattern", source.TagPattern).Msg("invalid tag pattern")
+				continue
+			}
+			if !matched {
+				continue
+			}
+		}
+
+		// Apply exclude pattern if specified
+		if source.ExcludePattern != "" {
+			matched, err := regexp.MatchString(source.ExcludePattern, versionString)
+			if err != nil {
+				log.Warn().Err(err).Str("pattern", source.ExcludePattern).Msg("invalid exclude pattern")
+				continue
+			}
+			if matched {
+				continue
+			}
+		}
+
+		filtered = append(filtered, version)
+	}
+
+	return filtered
 }
 
 // buildIndexURL constructs the full URL to the index.yaml file
