@@ -7,6 +7,7 @@ type ApplyOptions struct {
 	ConfigPath   string
 	OutputFormat string
 	DryRun       bool
+	Local        bool
 	Limit        int
 	Only         string
 }

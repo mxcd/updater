@@ -53,6 +53,22 @@ func Apply(options *ApplyOptions) error {
 	// Output the apply plan
 	if options.DryRun {
 		outputDryRunPlan(patchGroups)
+	} else if options.Local {
+		outputLocalPlan(updateItems)
+
+		// Apply all updates directly to local files — no git operations
+		for _, update := range updateItems {
+			if err := applyUpdate(config, update); err != nil {
+				return fmt.Errorf("failed to apply update for %s in %s: %w", update.ItemName, update.TargetFile, err)
+			}
+			fmt.Printf("  ✓ Updated %s in %s: %s → %s\n",
+				update.ItemName,
+				update.TargetFile,
+				update.CurrentVersion,
+				update.LatestVersion)
+		}
+
+		fmt.Println("\n✅ Successfully applied all updates locally")
 	} else {
 		outputApplyPlan(patchGroups)
 

@@ -7,8 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
-	"strconv"
-	"strings"
+	"time"
 
 	"github.com/mxcd/updater/internal/configuration"
 	"github.com/rs/zerolog/log"
@@ -52,7 +51,10 @@ func scrapeTag(provider *configuration.PackageSourceProvider, source *configurat
 		Msg("sorted all versions")
 
 	// NOW filter the sorted versions based on patterns
-	filteredVersions := filterGitVersions(allVersions, source)
+	filteredVersions, err := filterGitVersions(allVersions, source)
+	if err != nil {
+		return nil, err
+	}
 
 	log.Debug().
 		Int("filtered_versions", len(filteredVersions)).
@@ -95,7 +97,7 @@ func fetchAllGitHubTags(apiBaseURL string, repoInfo *RepositoryInfo, provider *c
 		tagLimit = 0 // Normalize negative values to unlimited
 	}
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 
 	for {
 		// Check if we've reached the tag limit
@@ -194,34 +196,7 @@ func parseGitTag(tagName string, commitSHA string) *configuration.PackageSourceV
 		Version: tagName,
 	}
 
-	// Try to parse semantic version from tag
-	// Common patterns: v1.2.3, 1.2.3, 1.2.3-alpha, etc.
-	versionString := strings.TrimPrefix(tagName, "v")
-
-	// Split on common separators to get the base version
-	baseParts := strings.FieldsFunc(versionString, func(r rune) bool {
-		return r == '-' || r == '_' || r == '+'
-	})
-
-	if len(baseParts) > 0 {
-		parts := strings.Split(baseParts[0], ".")
-
-		if len(parts) >= 1 {
-			if major, err := strconv.Atoi(parts[0]); err == nil {
-				version.MajorVersion = major
-			}
-		}
-		if len(parts) >= 2 {
-			if minor, err := strconv.Atoi(parts[1]); err == nil {
-				version.MinorVersion = minor
-			}
-		}
-		if len(parts) >= 3 {
-			if patch, err := strconv.Atoi(parts[2]); err == nil {
-				version.PatchVersion = patch
-			}
-		}
-	}
+	version.MajorVersion, version.MinorVersion, version.PatchVersion = configuration.ParseSemver(tagName)
 
 	// Add commit SHA as version information
 	if commitSHA != "" {
@@ -231,32 +206,41 @@ func parseGitTag(tagName string, commitSHA string) *configuration.PackageSourceV
 	return version
 }
 
-func filterGitVersions(versions []*configuration.PackageSourceVersion, source *configuration.PackageSource) []*configuration.PackageSourceVersion {
+func filterGitVersions(versions []*configuration.PackageSourceVersion, source *configuration.PackageSource) ([]*configuration.PackageSourceVersion, error) {
+	// Compile regex patterns once before the loop
+	var tagPatternRe *regexp.Regexp
+	if source.TagPattern != "" {
+		var err error
+		tagPatternRe, err = regexp.Compile(source.TagPattern)
+		if err != nil {
+			return nil, fmt.Errorf("invalid tag pattern %q: %w", source.TagPattern, err)
+		}
+	}
+
+	var excludePatternRe *regexp.Regexp
+	if source.ExcludePattern != "" {
+		var err error
+		excludePatternRe, err = regexp.Compile(source.ExcludePattern)
+		if err != nil {
+			return nil, fmt.Errorf("invalid exclude pattern %q: %w", source.ExcludePattern, err)
+		}
+	}
+
 	filtered := make([]*configuration.PackageSourceVersion, 0, len(versions))
 
 	for _, version := range versions {
 		tag := version.Version
 
 		// Apply tag pattern if specified
-		if source.TagPattern != "" {
-			matched, err := regexp.MatchString(source.TagPattern, tag)
-			if err != nil {
-				log.Warn().Err(err).Str("pattern", source.TagPattern).Msg("invalid tag pattern")
-				continue
-			}
-			if !matched {
+		if tagPatternRe != nil {
+			if !tagPatternRe.MatchString(tag) {
 				continue
 			}
 		}
 
 		// Apply exclude pattern if specified
-		if source.ExcludePattern != "" {
-			matched, err := regexp.MatchString(source.ExcludePattern, tag)
-			if err != nil {
-				log.Warn().Err(err).Str("pattern", source.ExcludePattern).Msg("invalid exclude pattern")
-				continue
-			}
-			if matched {
+		if excludePatternRe != nil {
+			if excludePatternRe.MatchString(tag) {
 				continue
 			}
 		}
@@ -264,7 +248,7 @@ func filterGitVersions(versions []*configuration.PackageSourceVersion, source *c
 		filtered = append(filtered, version)
 	}
 
-	return filtered
+	return filtered, nil
 }
 
 func sortVersions(versions []*configuration.PackageSourceVersion, source *configuration.PackageSource) {

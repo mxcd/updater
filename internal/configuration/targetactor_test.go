@@ -219,13 +219,13 @@ func TestTargetActorSubstitution(t *testing.T) {
 	}()
 
 	tests := []struct {
-		name           string
-		targetActor    *TargetActor
-		expectedName   string
-		expectedEmail  string
-		expectedUser   string
-		expectedToken  string
-		expectError    bool
+		name          string
+		targetActor   *TargetActor
+		expectedName  string
+		expectedEmail string
+		expectedUser  string
+		expectedToken string
+		expectError   bool
 	}{
 		{
 			name: "substitute all fields with env vars",
@@ -235,11 +235,11 @@ func TestTargetActorSubstitution(t *testing.T) {
 				Username: "${TEST_USERNAME}",
 				Token:    "${TEST_TOKEN}",
 			},
-			expectedName:   "Environment User",
-			expectedEmail:  "env@example.com",
-			expectedUser:   "envuser",
-			expectedToken:  "env_token_123",
-			expectError:    false,
+			expectedName:  "Environment User",
+			expectedEmail: "env@example.com",
+			expectedUser:  "envuser",
+			expectedToken: "env_token_123",
+			expectError:   false,
 		},
 		{
 			name: "substitute some fields with env vars",
@@ -249,11 +249,11 @@ func TestTargetActorSubstitution(t *testing.T) {
 				Username: "${TEST_USERNAME}",
 				Token:    "literal_token",
 			},
-			expectedName:   "Environment User",
-			expectedEmail:  "literal@example.com",
-			expectedUser:   "envuser",
-			expectedToken:  "literal_token",
-			expectError:    false,
+			expectedName:  "Environment User",
+			expectedEmail: "literal@example.com",
+			expectedUser:  "envuser",
+			expectedToken: "literal_token",
+			expectError:   false,
 		},
 		{
 			name: "no substitution needed",
@@ -263,11 +263,11 @@ func TestTargetActorSubstitution(t *testing.T) {
 				Username: "literaluser",
 				Token:    "literal_token",
 			},
-			expectedName:   "Literal User",
-			expectedEmail:  "literal@example.com",
-			expectedUser:   "literaluser",
-			expectedToken:  "literal_token",
-			expectError:    false,
+			expectedName:  "Literal User",
+			expectedEmail: "literal@example.com",
+			expectedUser:  "literaluser",
+			expectedToken: "literal_token",
+			expectError:   false,
 		},
 		{
 			name: "missing environment variable",

@@ -25,14 +25,14 @@ func compareInternal(config *configuration.Config, limit int, only string, outpu
 		Limit: limit,
 	}
 
-	if err := orchestrator.ScrapeAllSources(scrapeOptions); err != nil {
-		log.Error().Err(err).Msg("Failed to scrape package sources")
-		return nil, fmt.Errorf("scraping error: %w", err)
-	}
+	scrapeResult := orchestrator.ScrapeAllSources(scrapeOptions)
 
-	log.Debug().Msg("Successfully scraped all package sources")
+	log.Debug().
+		Int("succeeded", scrapeResult.Succeeded).
+		Int("failed", scrapeResult.Failed).
+		Msg("Scraping complete")
 
-	// Create comparison engine
+	// Create comparison engine (works with partial results from successful sources)
 	compareEngine := compare.NewCompareEngine(orchestrator.GetConfig())
 
 	// Perform comparison
@@ -45,7 +45,19 @@ func compareInternal(config *configuration.Config, limit int, only string, outpu
 	// Filter results based on 'only' flag
 	filteredResults := filterComparisonResults(results, only)
 
-	err = outputComparisonResults(filteredResults, outputFormat)
+	if err := outputComparisonResults(filteredResults, outputFormat); err != nil {
+		log.Error().Err(err).Msg("Failed to output comparison results")
+		return nil, fmt.Errorf("output error: %w", err)
+	}
+
+	// Show scraping errors at the end
+	if scrapeResult.HasErrors() {
+		fmt.Printf("\n⚠️  %d of %d source(s) failed to scrape:\n", scrapeResult.Failed, scrapeResult.Succeeded+scrapeResult.Failed)
+		for _, scrapeErr := range scrapeResult.Errors {
+			fmt.Printf("  ❌ %s (provider: %s): %v\n", scrapeErr.SourceName, scrapeErr.Provider, scrapeErr.Err)
+		}
+		fmt.Println()
+	}
 
 	// Check if there are pending updates
 	hasUpdates := false

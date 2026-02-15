@@ -146,7 +146,7 @@ func TestParseRepositoryURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ParseRepositoryURL(tt.uri)
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("ParseRepositoryURL() error = nil, wantErr = true")
@@ -157,16 +157,16 @@ func TestParseRepositoryURL(t *testing.T) {
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("ParseRepositoryURL() unexpected error = %v", err)
 				return
 			}
-			
+
 			if got.Owner != tt.wantOwner {
 				t.Errorf("ParseRepositoryURL() owner = %v, want %v", got.Owner, tt.wantOwner)
 			}
-			
+
 			if got.Repo != tt.wantRepo {
 				t.Errorf("ParseRepositoryURL() repo = %v, want %v", got.Repo, tt.wantRepo)
 			}
@@ -228,7 +228,7 @@ func TestBuildAPIURL(t *testing.T) {
 }
 
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || 
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
 		(len(s) > 0 && len(substr) > 0 && hasSubstring(s, substr)))
 }
 

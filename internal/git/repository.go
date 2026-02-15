@@ -145,9 +145,9 @@ func (r *Repository) detectBaseBranch() (string, error) {
 		}
 	}
 
-	// Strategy 4: Fallback to current branch
+	// Strategy 4: Fallback to current branch (with warning about potential issues)
 	if currentBranch != "" {
-		log.Warn().Str("branch", currentBranch).Msg("Using current branch as base branch fallback")
+		log.Warn().Str("branch", currentBranch).Msg("Could not detect default branch; falling back to current branch. If this is a feature branch, PRs may contain unrelated changes.")
 		return currentBranch, nil
 	}
 
@@ -168,7 +168,7 @@ func (r *Repository) CreateBranch(branchName string) error {
 
 	// Pull latest changes
 	if err := r.pull(); err != nil {
-		log.Warn().Err(err).Msg("Failed to pull latest changes, continuing anyway")
+		return fmt.Errorf("failed to pull latest changes from base branch: %w", err)
 	}
 
 	// Create and checkout new branch
@@ -200,7 +200,7 @@ func (r *Repository) CheckoutOrCreateBranch(branchName string) (bool, error) {
 
 	// Pull latest changes from base branch (explicitly use base branch name)
 	if err := r.pullFromRemote(r.BaseBranch); err != nil {
-		log.Warn().Err(err).Msg("Failed to pull latest changes from base branch, continuing anyway")
+		return false, fmt.Errorf("failed to pull latest changes from base branch: %w", err)
 	}
 
 	// Try to fetch the branch from remote
@@ -216,7 +216,7 @@ func (r *Repository) CheckoutOrCreateBranch(branchName string) (bool, error) {
 		if remoteBranchExists {
 			// Pull latest changes from the remote branch
 			if err := r.pullFromRemote(branchName); err != nil {
-				log.Warn().Err(err).Msg("Failed to pull latest changes from remote branch, continuing anyway")
+				return false, fmt.Errorf("failed to pull latest changes from remote branch %s: %w", branchName, err)
 			}
 			log.Debug().Str("branch", branchName).Msg("Pulled latest changes from remote branch")
 			return true, nil
@@ -270,19 +270,6 @@ func (r *Repository) fetchBranch(branchName string) error {
 		// It's okay if fetch fails (branch might not exist on remote)
 		log.Debug().Err(err).Str("output", string(output)).Msg("Failed to fetch branch from remote")
 		return err
-	}
-
-	return nil
-}
-
-// resetToBaseBranch resets the current branch to match the base branch
-func (r *Repository) resetToBaseBranch() error {
-	cmd := exec.Command("git", "reset", "--hard", fmt.Sprintf("origin/%s", r.BaseBranch))
-	cmd.Dir = r.WorkingDirectory
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to reset branch: %w, output: %s", err, string(output))
 	}
 
 	return nil
@@ -394,23 +381,6 @@ func (r *Repository) Push() error {
 	return nil
 }
 
-// ForcePush force pushes the current branch to remote
-func (r *Repository) ForcePush() error {
-	log.Debug().Str("branch", r.BranchName).Msg("Force pushing branch to remote")
-
-	cmd := exec.Command("git", "push", "-f", "origin", r.BranchName)
-	cmd.Dir = r.WorkingDirectory
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to force push: %w, output: %s", err, string(output))
-	}
-
-	log.Debug().Str("branch", r.BranchName).Msg("Force pushed branch to remote")
-
-	return nil
-}
-
 // isDirectory checks if a path is a directory
 func isDirectory(path string) bool {
 	info, err := os.Stat(path)
@@ -441,6 +411,10 @@ func (r *Repository) HasUncommittedChanges() (bool, error) {
 
 // HasUnpushedCommits checks if there are commits that haven't been pushed to remote
 func (r *Repository) HasUnpushedCommits() (bool, error) {
+	if r.BranchName == "" {
+		return false, fmt.Errorf("branch name is not set, cannot check for unpushed commits")
+	}
+
 	// First check if the remote branch exists
 	cmd := exec.Command("git", "rev-parse", "--verify", fmt.Sprintf("origin/%s", r.BranchName))
 	cmd.Dir = r.WorkingDirectory
@@ -488,18 +462,4 @@ func (r *Repository) GetLastCommitMessage() (string, error) {
 	}
 
 	return strings.TrimSpace(string(output)), nil
-}
-
-// deleteBranch deletes a local branch
-func (r *Repository) deleteBranch(branchName string) error {
-	cmd := exec.Command("git", "branch", "-D", branchName)
-	cmd.Dir = r.WorkingDirectory
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to delete branch: %w, output: %s", err, string(output))
-	}
-
-	log.Debug().Str("branch", branchName).Msg("Deleted local branch")
-	return nil
 }

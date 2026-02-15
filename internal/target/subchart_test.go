@@ -244,7 +244,7 @@ dependencies:
 				if err != nil {
 					t.Errorf("Failed to read file: %v", err)
 				}
-				
+
 				// Check that the new version is in the file
 				if !strings.Contains(string(content), tt.newVersion) {
 					t.Errorf("Updated version '%s' not found in file content", tt.newVersion)

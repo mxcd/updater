@@ -55,7 +55,7 @@ func ParseImageURL(uri string) (*ImageInfo, error) {
 	var repository string
 
 	parts := strings.Split(uri, "/")
-	
+
 	if len(parts) == 1 {
 		// Single part: "nginx" -> Docker Hub, library namespace
 		registry = ""
@@ -63,7 +63,7 @@ func ParseImageURL(uri string) (*ImageInfo, error) {
 	} else if len(parts) == 2 {
 		// Two parts: check if first part is a registry or namespace
 		firstPart := parts[0]
-		
+
 		// If first part contains a dot, colon, or is "localhost", it's a registry
 		if strings.Contains(firstPart, ".") || strings.Contains(firstPart, ":") || firstPart == "localhost" {
 			registry = firstPart

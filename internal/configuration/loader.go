@@ -207,8 +207,7 @@ func ExpandWildcardTargets(config *Config) error {
 				log.Warn().
 					Str("pattern", target.File).
 					Msg("Wildcard pattern matched no files")
-				// Keep the original target if no matches
-				expandedTargets = append(expandedTargets, target)
+				// Skip targets whose wildcard pattern matched no files
 				continue
 			}
 
@@ -246,7 +245,7 @@ func ExpandWildcardTargets(config *Config) error {
 func recursiveGlob(pattern string) ([]string, error) {
 	// Split pattern into parts
 	parts := strings.Split(filepath.ToSlash(pattern), "/")
-	
+
 	// Find the index of the first ** in the pattern
 	recursiveIndex := -1
 	for i, part := range parts {
@@ -333,19 +332,19 @@ func matchesAfterPattern(path, pattern string) bool {
 	// Normalize path separators
 	path = filepath.ToSlash(path)
 	pattern = filepath.ToSlash(pattern)
-	
+
 	// If pattern has no wildcards, check if path ends with pattern
 	if !strings.ContainsAny(pattern, "*?[") {
 		return strings.HasSuffix(path, pattern) || path == pattern
 	}
-	
+
 	// For patterns with wildcards, try matching against each segment
 	// This handles cases like "*/*.yaml" matching "dev/Chart.yaml"
 	matched, _ := filepath.Match(pattern, path)
 	if matched {
 		return true
 	}
-	
+
 	// Also check if the basename matches the pattern
 	// This handles "*.yaml" matching files at any depth
 	basename := filepath.Base(path)

@@ -53,3 +53,13 @@ type DependencyNotFoundError struct {
 func (e *DependencyNotFoundError) Error() string {
 	return fmt.Sprintf("dependency '%s' not found in file: %s", e.Dependency, e.File)
 }
+
+// YamlFieldNotFoundError is returned when a YAML path cannot be resolved in the target file
+type YamlFieldNotFoundError struct {
+	Path string
+	File string
+}
+
+func (e *YamlFieldNotFoundError) Error() string {
+	return fmt.Sprintf("yaml path '%s' not found in file: %s", e.Path, e.File)
+}

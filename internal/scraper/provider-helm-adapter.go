@@ -17,10 +17,6 @@ func NewHelmProviderClient(provider *configuration.PackageSourceProvider) Provid
 	}
 }
 
-func (a *HelmProviderClientAdapter) NewClient(provider *configuration.PackageSourceProvider) (ProviderClient, error) {
-	return NewHelmProviderClient(provider), nil
-}
-
 func (a *HelmProviderClientAdapter) ScrapePackageSource(source *configuration.PackageSource, opts *ScrapeOptions) ([]*configuration.PackageSourceVersion, error) {
 	helmOpts := &helm.ScrapeOptions{
 		Limit: opts.Limit,

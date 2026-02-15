@@ -138,80 +138,37 @@ func buildPRBody(updates []*UpdateItem, group *PatchGroup) string {
 		sb.WriteString("Please review the changelog and test thoroughly before merging.\n\n")
 	}
 
-	// Group updates by wildcard pattern
-	wildcardGroups := make(map[string][]*UpdateItem)
-	nonWildcardUpdates := make([]*UpdateItem, 0)
-	
-	for _, update := range updates {
-		if update.IsWildcardMatch && update.WildcardPattern != "" {
-			wildcardGroups[update.WildcardPattern] = append(wildcardGroups[update.WildcardPattern], update)
-		} else {
-			nonWildcardUpdates = append(nonWildcardUpdates, update)
-		}
-	}
+	patterns, wildcardGroups, nonWildcardUpdates := splitByWildcard(updates)
 
 	sb.WriteString("| Item | File | Current | Latest | Type |\n")
 	sb.WriteString("|------------|------|---------|--------|------|\n")
 
 	// Display wildcard groups first
-	for pattern, groupUpdates := range wildcardGroups {
-		// Group header
+	for _, pattern := range patterns {
+		groupUpdates := wildcardGroups[pattern]
 		sb.WriteString(fmt.Sprintf("| **%s** | `%s` (%d files) | | | |\n",
 			"Wildcard Group",
 			pattern,
 			len(groupUpdates)))
-		
-		// Individual files in the group
+
 		for _, update := range groupUpdates {
-			displayName := update.TargetName
-			if update.ItemName != "" {
-				displayName = update.ItemName
-			}
-			
-			// Add emoji indicator for update type
-			typeDisplay := string(update.UpdateType)
-			switch update.UpdateType {
-			case "major":
-				typeDisplay = "🔴 " + typeDisplay
-			case "minor":
-				typeDisplay = "🟡 " + typeDisplay
-			case "patch":
-				typeDisplay = "🟢 " + typeDisplay
-			}
-			
 			sb.WriteString(fmt.Sprintf("| ↳ %s | `%s` | `%s` | `%s` | %s |\n",
-				displayName,
+				displayName(update),
 				update.TargetFile,
 				update.CurrentVersion,
 				update.LatestVersion,
-				typeDisplay))
+				formatUpdateType(update.UpdateType)))
 		}
 	}
 
 	// Display non-wildcard updates
 	for _, update := range nonWildcardUpdates {
-		displayName := update.TargetName
-		if update.ItemName != "" {
-			displayName = update.ItemName
-		}
-		
-		// Add emoji indicator for update type
-		typeDisplay := string(update.UpdateType)
-		switch update.UpdateType {
-		case "major":
-			typeDisplay = "🔴 " + typeDisplay
-		case "minor":
-			typeDisplay = "🟡 " + typeDisplay
-		case "patch":
-			typeDisplay = "🟢 " + typeDisplay
-		}
-		
 		sb.WriteString(fmt.Sprintf("| %s | `%s` | `%s` | `%s` | %s |\n",
-			displayName,
+			displayName(update),
 			update.TargetFile,
 			update.CurrentVersion,
 			update.LatestVersion,
-			typeDisplay))
+			formatUpdateType(update.UpdateType)))
 	}
 
 	sb.WriteString("\n---\n")

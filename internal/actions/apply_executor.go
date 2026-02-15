@@ -3,6 +3,7 @@ package actions
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 
 	"github.com/mxcd/updater/internal/configuration"
 	"github.com/mxcd/updater/internal/git"
@@ -37,20 +38,28 @@ func applyPatchGroup(config *configuration.Config, group *PatchGroup) error {
 	var branchExists bool
 	var branchPushed bool
 	var prURL string
-	
+
+	// Sort file paths for deterministic processing order
+	filePaths := make([]string, 0, len(fileGroups))
+	for filePath := range fileGroups {
+		filePaths = append(filePaths, filePath)
+	}
+	sort.Strings(filePaths)
+
 	// Process each file separately
 	fileIndex := 0
 	totalFiles := len(fileGroups)
-	for filePath, updates := range fileGroups {
+	for _, filePath := range filePaths {
+		updates := fileGroups[filePath]
 		fileIndex++
 		isLastFile := fileIndex == totalFiles
-		
+
 		// Pass whether this is the last file so PR is only created once
 		fileRepo, fileBranchExists, fileBranchPushed, err := applyFileUpdates(config, filePath, updates, group, isLastFile)
 		if err != nil {
 			return fmt.Errorf("failed to apply updates to file %s: %w", filePath, err)
 		}
-		
+
 		// Store repo and branch info from first file
 		if repo == nil {
 			repo = fileRepo
@@ -205,7 +214,7 @@ func applyFileUpdates(config *configuration.Config, filePath string, updates []*
 
 	// Track whether branch was pushed
 	branchPushed = false
-	
+
 	// Push branch only if this is the last file (after all commits are made)
 	if isLastFile && needsPush {
 		if err = repo.Push(); err != nil {

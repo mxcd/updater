@@ -10,12 +10,12 @@ import (
 func TestExpandWildcardTargets(t *testing.T) {
 	// Create a temporary directory structure for testing
 	tmpDir := t.TempDir()
-	
+
 	// Create test files
 	env1Dir := filepath.Join(tmpDir, "environments", "dev")
 	env2Dir := filepath.Join(tmpDir, "environments", "prod")
 	env3Dir := filepath.Join(tmpDir, "environments", "staging")
-	
+
 	if err := os.MkdirAll(env1Dir, 0755); err != nil {
 		t.Fatalf("Failed to create test directory: %v", err)
 	}
@@ -25,7 +25,7 @@ func TestExpandWildcardTargets(t *testing.T) {
 	if err := os.MkdirAll(env3Dir, 0755); err != nil {
 		t.Fatalf("Failed to create test directory: %v", err)
 	}
-	
+
 	// Create Chart.yaml files
 	chartContent := `apiVersion: v2
 name: test-app
@@ -35,11 +35,11 @@ dependencies:
     version: 1.0.0
     repository: oci://registry.example.com/charts
 `
-	
+
 	devChart := filepath.Join(env1Dir, "Chart.yaml")
 	prodChart := filepath.Join(env2Dir, "Chart.yaml")
 	stagingChart := filepath.Join(env3Dir, "Chart.yaml")
-	
+
 	if err := os.WriteFile(devChart, []byte(chartContent), 0644); err != nil {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
@@ -51,11 +51,11 @@ dependencies:
 	}
 
 	tests := []struct {
-		name           string
-		config         *Config
-		expectedCount  int
-		checkWildcard  bool
-		wildcardCount  int
+		name          string
+		config        *Config
+		expectedCount int
+		checkWildcard bool
+		wildcardCount int
 	}{
 		{
 			name: "expand wildcard pattern",
@@ -132,7 +132,7 @@ dependencies:
 			wildcardCount: 3,
 		},
 		{
-			name: "wildcard with no matches - keep original",
+			name: "wildcard with no matches - skip target",
 			config: &Config{
 				Targets: []*Target{
 					{
@@ -148,7 +148,7 @@ dependencies:
 					},
 				},
 			},
-			expectedCount: 1, // Original target kept
+			expectedCount: 0, // Target skipped when no matches
 			checkWildcard: false,
 			wildcardCount: 0,
 		},
@@ -177,7 +177,7 @@ dependencies:
 						}
 					}
 				}
-				
+
 				if wildcardMatches != tt.wildcardCount {
 					t.Errorf("Expected %d wildcard matches, got %d", tt.wildcardCount, wildcardMatches)
 				}
@@ -188,26 +188,26 @@ dependencies:
 
 func TestExpandWildcardTargets_PreservesTargetProperties(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// Create test structure
 	env1Dir := filepath.Join(tmpDir, "env1")
 	env2Dir := filepath.Join(tmpDir, "env2")
-	
+
 	if err := os.MkdirAll(env1Dir, 0755); err != nil {
 		t.Fatalf("Failed to create test directory: %v", err)
 	}
 	if err := os.MkdirAll(env2Dir, 0755); err != nil {
 		t.Fatalf("Failed to create test directory: %v", err)
 	}
-	
+
 	chart1 := filepath.Join(env1Dir, "Chart.yaml")
 	chart2 := filepath.Join(env2Dir, "Chart.yaml")
-	
+
 	chartContent := `apiVersion: v2
 name: test
 version: 1.0.0
 `
-	
+
 	if err := os.WriteFile(chart1, []byte(chartContent), 0644); err != nil {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
@@ -269,7 +269,7 @@ version: 1.0.0
 func TestExpandWildcardTargets_RecursiveGlob(t *testing.T) {
 	// Create a nested directory structure with Chart.yaml files
 	tmpDir := t.TempDir()
-	
+
 	// Create: envs/dev/app1/Chart.yaml
 	devApp1Dir := filepath.Join(tmpDir, "envs", "dev", "app1")
 	if err := os.MkdirAll(devApp1Dir, 0755); err != nil {
@@ -379,7 +379,7 @@ func TestExpandWildcardTargets_RecursiveGlob(t *testing.T) {
 func TestExpandWildcardTargets_RecursiveGlobSingleLevel(t *testing.T) {
 	// Test that ** also works for matching files in the immediate directory
 	tmpDir := t.TempDir()
-	
+
 	// Create: Chart.yaml in root
 	rootFile := filepath.Join(tmpDir, "Chart.yaml")
 	if err := os.WriteFile(rootFile, []byte("apiVersion: v2\nname: root\nversion: 1.0.0"), 0644); err != nil {

@@ -50,14 +50,14 @@ generated: "2024-01-20T12:00:00Z"
 	defer server.Close()
 
 	tests := []struct {
-		name           string
-		provider       *configuration.PackageSourceProvider
-		source         *configuration.PackageSource
-		opts           *ScrapeOptions
-		expectError    bool
-		expectedCount  int
-		firstVersion   string
-		errorContains  string
+		name          string
+		provider      *configuration.PackageSourceProvider
+		source        *configuration.PackageSource
+		opts          *ScrapeOptions
+		expectError   bool
+		expectedCount int
+		firstVersion  string
+		errorContains string
 	}{
 		{
 			name: "successful scrape with valid chart",
@@ -244,13 +244,13 @@ func TestSortVersions(t *testing.T) {
 
 func TestConvertToPackageSourceVersion(t *testing.T) {
 	tests := []struct {
-		name              string
-		entry             *HelmIndexEntry
-		expectedVersion   string
-		expectedMajor     int
-		expectedMinor     int
-		expectedPatch     int
-		expectedInfo      string
+		name            string
+		entry           *HelmIndexEntry
+		expectedVersion string
+		expectedMajor   int
+		expectedMinor   int
+		expectedPatch   int
+		expectedInfo    string
 	}{
 		{
 			name: "standard version with appVersion",

@@ -33,14 +33,14 @@ type ChartYAML struct {
 
 // ChartDependency represents a dependency in Chart.yaml
 type ChartDependency struct {
-	Name       string `yaml:"name"`
-	Version    string `yaml:"version"`
-	Repository string `yaml:"repository"`
-	Condition  string `yaml:"condition,omitempty"`
-	Tags       []string `yaml:"tags,omitempty"`
-	Enabled    *bool  `yaml:"enabled,omitempty"`
+	Name         string        `yaml:"name"`
+	Version      string        `yaml:"version"`
+	Repository   string        `yaml:"repository"`
+	Condition    string        `yaml:"condition,omitempty"`
+	Tags         []string      `yaml:"tags,omitempty"`
+	Enabled      *bool         `yaml:"enabled,omitempty"`
 	ImportValues []interface{} `yaml:"import-values,omitempty"`
-	Alias      string `yaml:"alias,omitempty"`
+	Alias        string        `yaml:"alias,omitempty"`
 }
 
 // NewSubchartTargetForUpdateItem creates a new subchart target for a specific update item
@@ -134,19 +134,21 @@ func (t *SubchartTarget) WriteVersion(version string) error {
 
 	// Use regex to replace the version while preserving formatting
 	// This approach maintains comments and formatting better than full YAML rewrite
-	
+
 	// Try multiple patterns to handle different formatting styles
 	patterns := []string{
 		// Pattern 1: Multi-line format with potential extra fields
-		// Matches: - name: xxx\n    version: yyy\n    repository: zzz
+		// Matches: - name: xxx\n    version: yyy
+		// Uses [^\n-]* between name and version lines to avoid crossing dependency boundaries
 		fmt.Sprintf(
-			`(?m)(^\s*-\s+name:\s+%s\s*\n.*?version:\s+)([^\s\n]+)`,
+			`(?m)(^\s*-\s+name:\s+%s\s*\n(?:\s+[^\n]*\n)*?\s+version:\s+)([^\s\n]+)`,
 			regexp.QuoteMeta(t.updateItem.SubchartName),
 		),
 		// Pattern 2: Inline format with commas and braces
 		// Matches: - { name: xxx, version: yyy, repository: zzz }
+		// Constrained to single brace block
 		fmt.Sprintf(
-			`(name:\s+%s[^}]*version:\s+)([^,}\s]+)`,
+			`(\{[^}]*name:\s+%s[^}]*version:\s+)([^,}\s]+)`,
 			regexp.QuoteMeta(t.updateItem.SubchartName),
 		),
 		// Pattern 3: Single line with spaces between fields (no braces)
@@ -159,7 +161,7 @@ func (t *SubchartTarget) WriteVersion(version string) error {
 
 	var newContents string
 	matched := false
-	
+
 	for _, pattern := range patterns {
 		re := regexp.MustCompile(pattern)
 		if re.MatchString(t.fileContents) {
@@ -195,7 +197,10 @@ func (t *SubchartTarget) WriteVersion(version string) error {
 
 // GetTargetInfo returns metadata about this target
 func (t *SubchartTarget) GetTargetInfo() *TargetInfo {
-	currentVersion, _ := t.ReadCurrentVersion()
+	currentVersion, err := t.ReadCurrentVersion()
+	if err != nil {
+		log.Warn().Err(err).Str("file", t.config.File).Str("subchart", t.updateItem.SubchartName).Msg("Failed to read current version for target info")
+	}
 	targetName := t.updateItem.Name
 	if targetName == "" {
 		targetName = t.config.Name

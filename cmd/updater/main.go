@@ -152,6 +152,12 @@ func main() {
 						Usage: "Only apply specific update types: major, minor, patch, all",
 						Value: "all",
 					},
+					&cli.BoolFlag{
+						Name:    "local",
+						Aliases: []string{"l"},
+						Usage:   "Apply updates to local files without creating branches, commits, or PRs",
+						Value:   false,
+					},
 				},
 				Action: applyCommand,
 			},
@@ -189,10 +195,14 @@ func validateCommand(ctx context.Context, cmd *cli.Command) error {
 }
 
 func loadCommand(ctx context.Context, cmd *cli.Command) error {
+	limit := cmd.Int("limit")
+	if limit < 0 {
+		return cli.Exit("--limit must be a positive integer", 1)
+	}
 	options := &actions.LoadOptions{
 		ConfigPath:   cmd.String("config"),
 		OutputFormat: cmd.String("output"),
-		Limit:        cmd.Int("limit"),
+		Limit:        limit,
 	}
 
 	if err := actions.Load(options); err != nil {
@@ -203,10 +213,14 @@ func loadCommand(ctx context.Context, cmd *cli.Command) error {
 }
 
 func compareCommand(ctx context.Context, cmd *cli.Command) error {
+	limit := cmd.Int("limit")
+	if limit < 0 {
+		return cli.Exit("--limit must be a positive integer", 1)
+	}
 	options := &actions.CompareOptions{
 		ConfigPath:   cmd.String("config"),
 		OutputFormat: cmd.String("output"),
-		Limit:        cmd.Int("limit"),
+		Limit:        limit,
 		Only:         cmd.String("only"),
 	}
 
@@ -224,12 +238,17 @@ func compareCommand(ctx context.Context, cmd *cli.Command) error {
 }
 
 func applyCommand(ctx context.Context, cmd *cli.Command) error {
+	limit := cmd.Int("limit")
+	if limit < 0 {
+		return cli.Exit("--limit must be a positive integer", 1)
+	}
 	options := &actions.ApplyOptions{
-		ConfigPath: cmd.String("config"),
-    OutputFormat: cmd.String("output"),
-		DryRun:     cmd.Bool("dry-run"),
-		Limit:      cmd.Int("limit"),
-		Only:       cmd.String("only"),
+		ConfigPath:   cmd.String("config"),
+		OutputFormat: cmd.String("output"),
+		DryRun:       cmd.Bool("dry-run"),
+		Local:        cmd.Bool("local"),
+		Limit:        limit,
+		Only:         cmd.String("only"),
 	}
 
 	if err := actions.Apply(options); err != nil {

@@ -56,15 +56,22 @@ func Load(options *LoadOptions) error {
 		Limit: options.Limit,
 	}
 
-	if err := orchestrator.ScrapeAllSources(scrapeOptions); err != nil {
-		log.Error().Err(err).Msg("Failed to scrape package sources")
-		return fmt.Errorf("scraping error: %w", err)
-	}
+	scrapeResult := orchestrator.ScrapeAllSources(scrapeOptions)
 
-	// Output results
+	// Output results (including partial results from successful sources)
 	if err := outputLoadResults(orchestrator.GetConfig(), options.OutputFormat); err != nil {
 		log.Error().Err(err).Msg("Failed to output results")
 		return fmt.Errorf("output error: %w", err)
+	}
+
+	// Show scraping errors at the end
+	if scrapeResult.HasErrors() {
+		fmt.Printf("\n⚠️  %d of %d source(s) failed to scrape:\n", scrapeResult.Failed, scrapeResult.Succeeded+scrapeResult.Failed)
+		for _, scrapeErr := range scrapeResult.Errors {
+			fmt.Printf("  ❌ %s (provider: %s): %v\n", scrapeErr.SourceName, scrapeErr.Provider, scrapeErr.Err)
+		}
+		fmt.Println()
+		return fmt.Errorf("%d source(s) failed to scrape", scrapeResult.Failed)
 	}
 
 	log.Info().Msg("Successfully loaded and scraped all package sources")

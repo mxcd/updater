@@ -7,6 +7,5 @@ type ScrapeOptions struct {
 }
 
 type ProviderClient interface {
-	NewClient(*configuration.PackageSourceProvider) (ProviderClient, error)
 	ScrapePackageSource(*configuration.PackageSource, *ScrapeOptions) ([]*configuration.PackageSourceVersion, error)
 }

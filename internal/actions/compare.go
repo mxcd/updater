@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -64,14 +65,14 @@ func Compare(options *CompareOptions) (*CompareResult, error) {
 		Limit: options.Limit,
 	}
 
-	if err := orchestrator.ScrapeAllSources(scrapeOptions); err != nil {
-		log.Error().Err(err).Msg("Failed to scrape package sources")
-		return nil, fmt.Errorf("scraping error: %w", err)
-	}
+	scrapeResult := orchestrator.ScrapeAllSources(scrapeOptions)
 
-	log.Debug().Msg("Successfully scraped all package sources")
+	log.Debug().
+		Int("succeeded", scrapeResult.Succeeded).
+		Int("failed", scrapeResult.Failed).
+		Msg("Scraping complete")
 
-	// Create comparison engine
+	// Create comparison engine (works with partial results from successful sources)
 	compareEngine := compare.NewCompareEngine(orchestrator.GetConfig())
 
 	// Perform comparison
@@ -88,6 +89,15 @@ func Compare(options *CompareOptions) (*CompareResult, error) {
 	if err := outputComparisonResults(filteredResults, options.OutputFormat); err != nil {
 		log.Error().Err(err).Msg("Failed to output comparison results")
 		return nil, fmt.Errorf("output error: %w", err)
+	}
+
+	// Show scraping errors at the end
+	if scrapeResult.HasErrors() {
+		fmt.Printf("\n⚠️  %d of %d source(s) failed to scrape:\n", scrapeResult.Failed, scrapeResult.Succeeded+scrapeResult.Failed)
+		for _, scrapeErr := range scrapeResult.Errors {
+			fmt.Printf("  ❌ %s (provider: %s): %v\n", scrapeErr.SourceName, scrapeErr.Provider, scrapeErr.Err)
+		}
+		fmt.Println()
 	}
 
 	// Check if there are pending updates
@@ -171,17 +181,17 @@ func outputComparisonTable(results []*compare.ComparisonResult) error {
 	// Render each group
 	for i, groupName := range groupNames {
 		groupResults := groupedResults[groupName]
-		
+
 		t := table.NewWriter()
 		t.SetOutputMirror(os.Stdout)
-		
+
 		// Set title based on whether this is a named group or not
 		if groupName == "" {
 			t.SetTitle("🔍 Version Comparison")
 		} else {
 			t.SetTitle(fmt.Sprintf("🔍 Version Comparison - Patch Group: %s", groupName))
 		}
-		
+
 		t.AppendHeader(table.Row{"File / Variable", "Source", "Current", "Latest", "Update Type", "Status"})
 
 		groupUpdates := 0
@@ -228,7 +238,7 @@ func outputComparisonTable(results []*compare.ComparisonResult) error {
 
 		t.SetStyle(table.StyleRounded)
 		t.Render()
-		
+
 		// Group summary
 		if groupErrors > 0 || groupUpdates > 0 {
 			fmt.Print("  ")
@@ -240,7 +250,7 @@ func outputComparisonTable(results []*compare.ComparisonResult) error {
 			}
 			fmt.Println()
 		}
-		
+
 		// Add spacing between groups
 		if i < len(groupNames)-1 {
 			fmt.Println()
@@ -277,18 +287,15 @@ func groupResultsByPatchGroup(results []*compare.ComparisonResult) map[string][]
 
 // sortPatchGroups sorts patch group names with empty string first, then alphabetically
 func sortPatchGroups(groups []string) {
-	// Simple bubble sort - good enough for small lists
-	for i := 0; i < len(groups)-1; i++ {
-		for j := i + 1; j < len(groups); j++ {
-			// Empty string comes first
-			if groups[i] != "" && groups[j] == "" {
-				groups[i], groups[j] = groups[j], groups[i]
-			} else if groups[i] != "" && groups[j] != "" && groups[i] > groups[j] {
-				// Alphabetical order for non-empty strings
-				groups[i], groups[j] = groups[j], groups[i]
-			}
+	sort.Slice(groups, func(i, j int) bool {
+		if groups[i] == "" {
+			return true
 		}
-	}
+		if groups[j] == "" {
+			return false
+		}
+		return groups[i] < groups[j]
+	})
 }
 
 // filterWildcardDependencyErrors filters out "dependency not found" errors from wildcard matches

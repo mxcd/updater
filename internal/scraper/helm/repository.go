@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mxcd/updater/internal/configuration"
 	"github.com/rs/zerolog/log"
@@ -63,6 +63,9 @@ func scrapeHelmRepository(provider *configuration.PackageSourceProvider, source 
 	}
 
 	// Find the chart in the index
+	if index.Entries == nil {
+		return nil, fmt.Errorf("Helm index.yaml contains no entries")
+	}
 	chartEntries, exists := index.Entries[source.ChartName]
 	if !exists {
 		return nil, fmt.Errorf("chart '%s' not found in Helm repository", source.ChartName)
@@ -87,7 +90,10 @@ func scrapeHelmRepository(provider *configuration.PackageSourceProvider, source 
 		Msg("sorted all versions")
 
 	// NOW filter the sorted versions based on patterns
-	filteredVersions := filterVersions(allVersions, source)
+	filteredVersions, err := filterVersions(allVersions, source)
+	if err != nil {
+		return nil, err
+	}
 
 	log.Debug().
 		Int("filtered_versions", len(filteredVersions)).
@@ -112,32 +118,41 @@ func scrapeHelmRepository(provider *configuration.PackageSourceProvider, source 
 }
 
 // filterVersions filters versions based on tagPattern and excludePattern
-func filterVersions(versions []*configuration.PackageSourceVersion, source *configuration.PackageSource) []*configuration.PackageSourceVersion {
+func filterVersions(versions []*configuration.PackageSourceVersion, source *configuration.PackageSource) ([]*configuration.PackageSourceVersion, error) {
+	// Compile regex patterns once before the loop
+	var tagPatternRe *regexp.Regexp
+	if source.TagPattern != "" {
+		var err error
+		tagPatternRe, err = regexp.Compile(source.TagPattern)
+		if err != nil {
+			return nil, fmt.Errorf("invalid tag pattern %q: %w", source.TagPattern, err)
+		}
+	}
+
+	var excludePatternRe *regexp.Regexp
+	if source.ExcludePattern != "" {
+		var err error
+		excludePatternRe, err = regexp.Compile(source.ExcludePattern)
+		if err != nil {
+			return nil, fmt.Errorf("invalid exclude pattern %q: %w", source.ExcludePattern, err)
+		}
+	}
+
 	filtered := make([]*configuration.PackageSourceVersion, 0, len(versions))
 
 	for _, version := range versions {
 		versionString := version.Version
 
 		// Apply tag pattern if specified
-		if source.TagPattern != "" {
-			matched, err := regexp.MatchString(source.TagPattern, versionString)
-			if err != nil {
-				log.Warn().Err(err).Str("pattern", source.TagPattern).Msg("invalid tag pattern")
-				continue
-			}
-			if !matched {
+		if tagPatternRe != nil {
+			if !tagPatternRe.MatchString(versionString) {
 				continue
 			}
 		}
 
 		// Apply exclude pattern if specified
-		if source.ExcludePattern != "" {
-			matched, err := regexp.MatchString(source.ExcludePattern, versionString)
-			if err != nil {
-				log.Warn().Err(err).Str("pattern", source.ExcludePattern).Msg("invalid exclude pattern")
-				continue
-			}
-			if matched {
+		if excludePatternRe != nil {
+			if excludePatternRe.MatchString(versionString) {
 				continue
 			}
 		}
@@ -145,7 +160,7 @@ func filterVersions(versions []*configuration.PackageSourceVersion, source *conf
 		filtered = append(filtered, version)
 	}
 
-	return filtered
+	return filtered, nil
 }
 
 // buildIndexURL constructs the full URL to the index.yaml file
@@ -171,7 +186,7 @@ func fetchHelmIndex(indexURL string, provider *configuration.PackageSourceProvid
 	}
 
 	// Execute request
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	response, err := client.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch index.yaml: %w", err)
@@ -197,29 +212,8 @@ func convertToPackageSourceVersion(entry *HelmIndexEntry) *configuration.Package
 		Version: entry.Version,
 	}
 
-	// Parse semantic version components
-	versionString := strings.TrimPrefix(entry.Version, "v")
-	parts := strings.Split(versionString, ".")
+	version.MajorVersion, version.MinorVersion, version.PatchVersion = configuration.ParseSemver(entry.Version)
 
-	if len(parts) >= 1 {
-		if major, err := strconv.Atoi(parts[0]); err == nil {
-			version.MajorVersion = major
-		}
-	}
-	if len(parts) >= 2 {
-		if minor, err := strconv.Atoi(parts[1]); err == nil {
-			version.MinorVersion = minor
-		}
-	}
-	if len(parts) >= 3 {
-		// Handle patch versions that might have additional suffixes (e.g., "3-beta1")
-		patchPart := strings.Split(parts[2], "-")[0]
-		if patch, err := strconv.Atoi(patchPart); err == nil {
-			version.PatchVersion = patch
-		}
-	}
-
-	// Add version information if appVersion is available
 	if entry.AppVersion != "" {
 		version.VersionInformation = fmt.Sprintf("appVersion: %s", entry.AppVersion)
 	}

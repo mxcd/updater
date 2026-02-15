@@ -1,6 +1,8 @@
 package actions
 
 import (
+	"sort"
+
 	"github.com/mxcd/updater/internal/compare"
 	"github.com/mxcd/updater/internal/configuration"
 	"github.com/rs/zerolog/log"
@@ -37,8 +39,14 @@ func buildUpdateItems(config *configuration.Config, results []*compare.Compariso
 		// Merge labels (target labels + item labels)
 		labels := mergeLabels(targetConfig.Labels, updateItemConfig.Labels)
 
-		// Determine item name to display (priority: TerraformVariableName > Name > SourceName)
+		// Determine item name to display (priority: type-specific field > Name > SourceName)
 		itemName := updateItemConfig.TerraformVariableName
+		if itemName == "" {
+			itemName = updateItemConfig.SubchartName
+		}
+		if itemName == "" {
+			itemName = updateItemConfig.YamlPath
+		}
 		if itemName == "" {
 			itemName = updateItemConfig.Name
 		}
@@ -138,11 +146,14 @@ func groupUpdatesByPatchGroup(items []*UpdateItem) []*PatchGroup {
 		group.Labels = mergeLabels(group.Labels, item.Labels)
 	}
 
-	// Convert map to slice
+	// Convert map to sorted slice for deterministic ordering
 	groups := make([]*PatchGroup, 0, len(groupMap))
 	for _, group := range groupMap {
 		groups = append(groups, group)
 	}
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i].Name < groups[j].Name
+	})
 
 	return groups
 }

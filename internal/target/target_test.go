@@ -74,6 +74,52 @@ func TestTargetFactory_CreateTarget(t *testing.T) {
 	}
 }
 
+func TestTargetFactory_CreateTarget_YamlField(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "values.yaml")
+	fileContent := `image:
+  tag: "1.25.0"
+`
+	if err := os.WriteFile(tmpFile, []byte(fileContent), 0644); err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+
+	config := &configuration.Config{
+		PackageSources: []*configuration.PackageSource{},
+	}
+
+	targetConfig := &configuration.Target{
+		Name: "test-yaml-target",
+		Type: configuration.TargetTypeYamlField,
+		File: tmpFile,
+		Items: []configuration.TargetItem{
+			{
+				YamlPath: "image.tag",
+				Source:   "test-source",
+			},
+		},
+	}
+
+	factory := NewTargetFactory(config)
+	target, err := factory.CreateTargetForUpdateItem(targetConfig, &targetConfig.Items[0])
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if target == nil {
+		t.Fatalf("Expected target but got nil")
+	}
+
+	// Verify it works
+	version, err := target.ReadCurrentVersion()
+	if err != nil {
+		t.Fatalf("Failed to read version: %v", err)
+	}
+	if version != "1.25.0" {
+		t.Errorf("Expected version '1.25.0', got '%s'", version)
+	}
+}
+
 func TestTargetFactory_CreateAllTargets(t *testing.T) {
 	// Create temp directory and files
 	tmpDir := t.TempDir()

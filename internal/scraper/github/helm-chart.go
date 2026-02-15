@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mxcd/updater/internal/configuration"
 	"github.com/rs/zerolog/log"
@@ -54,27 +54,7 @@ func scrapeHelmChart(provider *configuration.PackageSourceProvider, source *conf
 		Version: chartData.Version,
 	}
 
-	// Try to parse semantic version (e.g., "1.2.3" or "v1.2.3")
-	versionString := strings.TrimPrefix(chartData.Version, "v")
-	parts := strings.Split(versionString, ".")
-
-	if len(parts) >= 1 {
-		if major, err := strconv.Atoi(parts[0]); err == nil {
-			version.MajorVersion = major
-		}
-	}
-	if len(parts) >= 2 {
-		if minor, err := strconv.Atoi(parts[1]); err == nil {
-			version.MinorVersion = minor
-		}
-	}
-	if len(parts) >= 3 {
-		// Handle patch versions that might have additional suffixes (e.g., "3-beta1")
-		patchPart := strings.Split(parts[2], "-")[0]
-		if patch, err := strconv.Atoi(patchPart); err == nil {
-			version.PatchVersion = patch
-		}
-	}
+	version.MajorVersion, version.MinorVersion, version.PatchVersion = configuration.ParseSemver(chartData.Version)
 
 	// Add version information if appVersion is available
 	if chartData.AppVersion != "" {
@@ -90,6 +70,7 @@ func scrapeHelmChart(provider *configuration.PackageSourceProvider, source *conf
 
 	return []*configuration.PackageSourceVersion{version}, nil
 }
+
 // isRawGitHubURL checks if the URI is a raw.githubusercontent.com URL
 func isRawGitHubURL(uri string) bool {
 	return strings.Contains(uri, "raw.githubusercontent.com")
@@ -113,7 +94,7 @@ func fetchFromRawURL(uri string, provider *configuration.PackageSourceProvider) 
 	}
 
 	// Execute request
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	response, err := client.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Chart.yaml from raw URL: %w", err)
@@ -192,7 +173,7 @@ func fetchViaGitHubAPI(provider *configuration.PackageSourceProvider, source *co
 	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
 	// Execute request
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	response, err := client.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Chart.yaml: %w", err)
@@ -211,7 +192,6 @@ func fetchViaGitHubAPI(provider *configuration.PackageSourceProvider, source *co
 
 	return body, nil
 }
-
 
 // extractPathFromRawURL attempts to extract the file path from old-style GitHub raw content URLs
 // Example: https://raw.githubusercontent.com/owner/repo/refs/heads/main/path/to/Chart.yaml

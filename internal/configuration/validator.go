@@ -182,6 +182,10 @@ func ValidateConfiguration(config *Config) *ValidationResult {
 				if strings.TrimSpace(item.SubchartName) == "" {
 					result.AddError(fmt.Sprintf("%s.subchartName", itemPrefix), "subchartName is required for subchart target")
 				}
+			case TargetTypeYamlField:
+				if strings.TrimSpace(item.YamlPath) == "" {
+					result.AddError(fmt.Sprintf("%s.yamlPath", itemPrefix), "yamlPath is required for yaml-field target")
+				}
 			}
 		}
 	}
@@ -273,7 +277,8 @@ func validateSourceProviderCombination(sourceType PackageSourceType, providerTyp
 func isValidTargetType(targetType TargetType) bool {
 	switch targetType {
 	case TargetTypeTerraformVariable,
-		TargetTypeSubchart:
+		TargetTypeSubchart,
+		TargetTypeYamlField:
 		return true
 	default:
 		return false

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/mxcd/updater/internal/configuration"
 	"github.com/rs/zerolog/log"
@@ -105,7 +106,7 @@ func parseGitHubURL(url string) (string, string, error) {
 		if atIndex != -1 {
 			// Everything after @ is host/owner/repo.git
 			remainder := url[atIndex+1:]
-			
+
 			// Find the first / after the host
 			slashIndex := strings.Index(remainder, "/")
 			if slashIndex != -1 {
@@ -196,7 +197,7 @@ func (c *GitHubClient) CreatePullRequest(options *PullRequestOptions) (string, e
 	req.Header.Set("Content-Type", "application/json")
 
 	// Send request
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to send request: %w", err)
@@ -270,7 +271,7 @@ func (c *GitHubClient) FindOpenPullRequest(headBranch string) (*PullRequest, err
 	req.Header.Set("Authorization", fmt.Sprintf("token %s", c.Token))
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
@@ -332,7 +333,7 @@ func (c *GitHubClient) UpdatePullRequest(prNumber int, options *PullRequestOptio
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
@@ -340,7 +341,10 @@ func (c *GitHubClient) UpdatePullRequest(prNumber int, options *PullRequestOptio
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		responseBody, _ := io.ReadAll(resp.Body)
+		responseBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("failed to update PR, status: %d (could not read response body: %v)", resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("failed to update PR, status: %d, body: %s", resp.StatusCode, string(responseBody))
 	}
 
@@ -382,7 +386,7 @@ func (c *GitHubClient) addLabels(prNumber int, labels []string) error {
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
@@ -390,7 +394,10 @@ func (c *GitHubClient) addLabels(prNumber int, labels []string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		responseBody, _ := io.ReadAll(resp.Body)
+		responseBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("failed to add labels, status: %d (could not read response body: %v)", resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("failed to add labels, status: %d, body: %s", resp.StatusCode, string(responseBody))
 	}
 

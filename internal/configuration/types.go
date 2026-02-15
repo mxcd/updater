@@ -73,6 +73,7 @@ type TargetType string
 const (
 	TargetTypeTerraformVariable TargetType = "terraform-variable"
 	TargetTypeSubchart          TargetType = "subchart"
+	TargetTypeYamlField         TargetType = "yaml-field"
 )
 
 type Target struct {
@@ -90,6 +91,7 @@ type TargetItem struct {
 	Name                  string   `yaml:"name,omitempty"`
 	TerraformVariableName string   `yaml:"terraformVariableName,omitempty"`
 	SubchartName          string   `yaml:"subchartName,omitempty"`
+	YamlPath              string   `yaml:"yamlPath,omitempty"`
 	Source                string   `yaml:"source"`
 	PatchGroup            string   `yaml:"patchGroup,omitempty"`
 	Labels                []string `yaml:"labels,omitempty"`

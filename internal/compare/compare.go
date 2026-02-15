@@ -2,7 +2,6 @@ package compare
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/mxcd/updater/internal/configuration"
@@ -12,19 +11,19 @@ import (
 
 // ComparisonResult represents the result of comparing a target with its source
 type ComparisonResult struct {
-	TargetName         string
-	TargetFile         string
-	TargetType         configuration.TargetType
-	TargetItemName     string // Variable name for terraform, subchart name for helm
-	SourceName         string
-	CurrentVersion     string
-	LatestVersion      string
-	UpdateType         UpdateType
-	NeedsUpdate        bool
-	Error              error
-	IsWildcardMatch    bool   // True if this target was expanded from a wildcard pattern
-	WildcardPattern    string // The original wildcard pattern if IsWildcardMatch is true
-	PatchGroup         string // Patch group for grouping updates together
+	TargetName      string
+	TargetFile      string
+	TargetType      configuration.TargetType
+	TargetItemName  string // Variable name for terraform, subchart name for helm
+	SourceName      string
+	CurrentVersion  string
+	LatestVersion   string
+	UpdateType      UpdateType
+	NeedsUpdate     bool
+	Error           error
+	IsWildcardMatch bool   // True if this target was expanded from a wildcard pattern
+	WildcardPattern string // The original wildcard pattern if IsWildcardMatch is true
+	PatchGroup      string // Patch group for grouping updates together
 }
 
 // UpdateType represents the type of update (major, minor, patch, none)
@@ -88,6 +87,8 @@ func (e *CompareEngine) compareTargetUpdateItem(targetConfig *configuration.Targ
 		itemName = updateItem.TerraformVariableName
 	case configuration.TargetTypeSubchart:
 		itemName = updateItem.SubchartName
+	case configuration.TargetTypeYamlField:
+		itemName = updateItem.YamlPath
 	}
 
 	// Determine patch group - use item's patch group if set, otherwise use target's patch group
@@ -152,7 +153,7 @@ func (e *CompareEngine) compareTargetUpdateItem(targetConfig *configuration.Targ
 	currentVersion, err := targetClient.ReadCurrentVersion()
 	if err != nil {
 		result.Error = fmt.Errorf("failed to read current version: %w", err)
-		
+
 		// For wildcard matches with dependency not found errors, use debug level logging
 		// These are expected when not all files contain the specified dependency
 		errStr := err.Error()
@@ -185,8 +186,6 @@ func (e *CompareEngine) compareTargetUpdateItem(targetConfig *configuration.Targ
 			Str("version", currentVersion).
 			Msg("Target is up to date")
 	} else {
-		result.NeedsUpdate = true
-
 		// Try to find current version in source versions to get semantic version info
 		var currentSemVer *configuration.PackageSourceVersion
 		for _, v := range source.Versions {
@@ -202,12 +201,22 @@ func (e *CompareEngine) compareTargetUpdateItem(targetConfig *configuration.Targ
 		}
 
 		result.UpdateType = determineUpdateType(currentSemVer, latestVersion)
-		log.Debug().
-			Str("target", targetConfig.Name).
-			Str("current", currentVersion).
-			Str("latest", latestVersion.Version).
-			Str("updateType", string(result.UpdateType)).
-			Msg("Update available")
+		// Only mark as needing update if it's actually an upgrade, not a downgrade
+		result.NeedsUpdate = result.UpdateType != UpdateTypeNone
+		if result.NeedsUpdate {
+			log.Debug().
+				Str("target", targetConfig.Name).
+				Str("current", currentVersion).
+				Str("latest", latestVersion.Version).
+				Str("updateType", string(result.UpdateType)).
+				Msg("Update available")
+		} else {
+			log.Debug().
+				Str("target", targetConfig.Name).
+				Str("current", currentVersion).
+				Str("latest", latestVersion.Version).
+				Msg("Latest version is not newer than current, skipping")
+		}
 	}
 
 	return result
@@ -235,32 +244,7 @@ func parseVersionString(version string) *configuration.PackageSourceVersion {
 	v := &configuration.PackageSourceVersion{
 		Version: version,
 	}
-
-	// Remove common prefixes
-	versionStr := strings.TrimPrefix(version, "v")
-	versionStr = strings.TrimPrefix(versionStr, "V")
-
-	// Split by dots
-	parts := strings.Split(versionStr, ".")
-
-	if len(parts) >= 1 {
-		if major, err := strconv.Atoi(parts[0]); err == nil {
-			v.MajorVersion = major
-		}
-	}
-	if len(parts) >= 2 {
-		if minor, err := strconv.Atoi(parts[1]); err == nil {
-			v.MinorVersion = minor
-		}
-	}
-	if len(parts) >= 3 {
-		// Handle patch versions that might have additional suffixes
-		patchPart := strings.Split(parts[2], "-")[0]
-		if patch, err := strconv.Atoi(patchPart); err == nil {
-			v.PatchVersion = patch
-		}
-	}
-
+	v.MajorVersion, v.MinorVersion, v.PatchVersion = configuration.ParseSemver(version)
 	return v
 }
 
@@ -268,6 +252,16 @@ func parseVersionString(version string) *configuration.PackageSourceVersion {
 func determineUpdateType(current, latest *configuration.PackageSourceVersion) UpdateType {
 	if current == nil || latest == nil {
 		// If we can't parse versions, we can't determine type
+		return UpdateTypePatch
+	}
+
+	// If both versions have all-zero semver fields but different version strings,
+	// they are non-semver versions. Treat as patch update so filters don't skip them.
+	if current.MajorVersion == 0 && current.MinorVersion == 0 && current.PatchVersion == 0 &&
+		latest.MajorVersion == 0 && latest.MinorVersion == 0 && latest.PatchVersion == 0 {
+		if normalizeVersion(current.Version) != normalizeVersion(latest.Version) {
+			return UpdateTypePatch
+		}
 		return UpdateTypeNone
 	}
 

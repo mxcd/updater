@@ -1,8 +1,9 @@
 package github
 
 import (
+	"fmt"
+
 	"github.com/mxcd/updater/internal/configuration"
-	"github.com/rs/zerolog/log"
 )
 
 type ScrapeOptions struct {
@@ -11,10 +12,6 @@ type ScrapeOptions struct {
 
 type GitHubProviderClient struct {
 	Options *configuration.PackageSourceProvider
-}
-
-type GitHubProviderOptions struct {
-	Config *configuration.PackageSourceProvider
 }
 
 func (c *GitHubProviderClient) ScrapePackageSource(source *configuration.PackageSource, opts *ScrapeOptions) ([]*configuration.PackageSourceVersion, error) {
@@ -26,7 +23,6 @@ func (c *GitHubProviderClient) ScrapePackageSource(source *configuration.Package
 	case configuration.PackageSourceTypeGitHelmChart:
 		return scrapeHelmChart(c.Options, source, opts)
 	default:
-		log.Fatal().Str("type", string(source.Type)).Msg("unsupported package source type for GitHub provider")
-		return nil, nil
+		return nil, fmt.Errorf("unsupported package source type for GitHub provider: %s", source.Type)
 	}
 }

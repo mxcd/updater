@@ -3,10 +3,57 @@ package actions
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/mxcd/updater/internal/compare"
 )
+
+// splitByWildcard separates updates into sorted wildcard groups and non-wildcard updates.
+func splitByWildcard(updates []*UpdateItem) (patterns []string, wildcardGroups map[string][]*UpdateItem, nonWildcard []*UpdateItem) {
+	wildcardGroups = make(map[string][]*UpdateItem)
+	nonWildcard = make([]*UpdateItem, 0)
+
+	for _, update := range updates {
+		if update.IsWildcardMatch && update.WildcardPattern != "" {
+			wildcardGroups[update.WildcardPattern] = append(wildcardGroups[update.WildcardPattern], update)
+		} else {
+			nonWildcard = append(nonWildcard, update)
+		}
+	}
+
+	patterns = make([]string, 0, len(wildcardGroups))
+	for p := range wildcardGroups {
+		patterns = append(patterns, p)
+	}
+	sort.Strings(patterns)
+
+	return patterns, wildcardGroups, nonWildcard
+}
+
+// formatUpdateType adds an emoji indicator to the update type for PR bodies.
+func formatUpdateType(ut compare.UpdateType) string {
+	s := string(ut)
+	switch ut {
+	case compare.UpdateTypeMajor:
+		return "🔴 " + s
+	case compare.UpdateTypeMinor:
+		return "🟡 " + s
+	case compare.UpdateTypePatch:
+		return "🟢 " + s
+	default:
+		return s
+	}
+}
+
+// displayName returns the best display name for an update item.
+func displayName(update *UpdateItem) string {
+	if update.ItemName != "" {
+		return update.ItemName
+	}
+	return update.TargetName
+}
 
 // outputDryRunPlan outputs the plan in dry-run mode
 func outputDryRunPlan(groups []*PatchGroup) {
@@ -23,7 +70,6 @@ func outputDryRunPlan(groups []*PatchGroup) {
 		}
 		fmt.Printf("   Updates: %d\n\n", len(group.Updates))
 
-		// Group by target file for commits
 		fileGroups := groupUpdatesByFile(group.Updates)
 		totalCommits += len(fileGroups)
 
@@ -31,40 +77,18 @@ func outputDryRunPlan(groups []*PatchGroup) {
 		t.SetOutputMirror(os.Stdout)
 		t.AppendHeader(table.Row{"Target", "File", "Source", "Current", "→", "Latest", "Type"})
 
-		// Group updates by wildcard pattern
-		wildcardGroups := make(map[string][]*UpdateItem)
-		nonWildcardUpdates := make([]*UpdateItem, 0)
-		
-		for _, update := range group.Updates {
-			if update.IsWildcardMatch && update.WildcardPattern != "" {
-				wildcardGroups[update.WildcardPattern] = append(wildcardGroups[update.WildcardPattern], update)
-			} else {
-				nonWildcardUpdates = append(nonWildcardUpdates, update)
-			}
-		}
+		patterns, wildcardGroups, nonWildcardUpdates := splitByWildcard(group.Updates)
 
-		// Display wildcard groups first
-		for pattern, groupUpdates := range wildcardGroups {
-			// Group header row
+		for _, pattern := range patterns {
+			groupUpdates := wildcardGroups[pattern]
 			t.AppendRow(table.Row{
 				fmt.Sprintf("📦 Wildcard: %s", pattern),
 				fmt.Sprintf("(%d files)", len(groupUpdates)),
-				"",
-				"",
-				"",
-				"",
-				"",
+				"", "", "", "", "",
 			})
-			
-			// Individual files in the group
 			for _, update := range groupUpdates {
-				displayName := update.TargetName
-				if update.ItemName != "" {
-					displayName = update.ItemName
-				}
-
 				t.AppendRow(table.Row{
-					"  ↳ " + displayName,
+					"  ↳ " + displayName(update),
 					update.TargetFile,
 					update.SourceName,
 					update.CurrentVersion,
@@ -76,15 +100,9 @@ func outputDryRunPlan(groups []*PatchGroup) {
 			t.AppendSeparator()
 		}
 
-		// Display non-wildcard updates
 		for _, update := range nonWildcardUpdates {
-			displayName := update.TargetName
-			if update.ItemName != "" {
-				displayName = update.ItemName
-			}
-
 			t.AppendRow(table.Row{
-				displayName,
+				displayName(update),
 				update.TargetFile,
 				update.SourceName,
 				update.CurrentVersion,
@@ -115,6 +133,54 @@ func outputDryRunPlan(groups []*PatchGroup) {
 	fmt.Println("💡 This is a dry run. Use 'apply' without --dry-run to execute.")
 }
 
+// outputLocalPlan outputs the plan for local-only mode (no git operations)
+func outputLocalPlan(updates []*UpdateItem) {
+	fmt.Println("\n📂 Local Apply Plan")
+	fmt.Println("====================")
+	fmt.Printf("   Updates: %d\n\n", len(updates))
+
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(table.Row{"Target", "File", "Current", "→", "Latest", "Type"})
+
+	patterns, wildcardGroups, nonWildcardUpdates := splitByWildcard(updates)
+
+	for _, pattern := range patterns {
+		groupUpdates := wildcardGroups[pattern]
+		t.AppendRow(table.Row{
+			fmt.Sprintf("📦 Wildcard: %s", pattern),
+			fmt.Sprintf("(%d files)", len(groupUpdates)),
+			"", "", "", "",
+		})
+		for _, update := range groupUpdates {
+			t.AppendRow(table.Row{
+				"  ↳ " + displayName(update),
+				update.TargetFile,
+				update.CurrentVersion,
+				"→",
+				update.LatestVersion,
+				update.UpdateType,
+			})
+		}
+		t.AppendSeparator()
+	}
+
+	for _, update := range nonWildcardUpdates {
+		t.AppendRow(table.Row{
+			displayName(update),
+			update.TargetFile,
+			update.CurrentVersion,
+			"→",
+			update.LatestVersion,
+			update.UpdateType,
+		})
+	}
+
+	t.SetStyle(table.StyleRounded)
+	t.Render()
+	fmt.Println()
+}
+
 // outputApplyPlan outputs the plan for actual execution
 func outputApplyPlan(groups []*PatchGroup) {
 	fmt.Println("\n🚀 Apply Plan")
@@ -130,39 +196,18 @@ func outputApplyPlan(groups []*PatchGroup) {
 		t.SetOutputMirror(os.Stdout)
 		t.AppendHeader(table.Row{"Target", "File", "Current", "→", "Latest", "Type"})
 
-		// Group updates by wildcard pattern
-		wildcardGroups := make(map[string][]*UpdateItem)
-		nonWildcardUpdates := make([]*UpdateItem, 0)
-		
-		for _, update := range group.Updates {
-			if update.IsWildcardMatch && update.WildcardPattern != "" {
-				wildcardGroups[update.WildcardPattern] = append(wildcardGroups[update.WildcardPattern], update)
-			} else {
-				nonWildcardUpdates = append(nonWildcardUpdates, update)
-			}
-		}
+		patterns, wildcardGroups, nonWildcardUpdates := splitByWildcard(group.Updates)
 
-		// Display wildcard groups first
-		for pattern, groupUpdates := range wildcardGroups {
-			// Group header row
+		for _, pattern := range patterns {
+			groupUpdates := wildcardGroups[pattern]
 			t.AppendRow(table.Row{
 				fmt.Sprintf("📦 Wildcard: %s", pattern),
 				fmt.Sprintf("(%d files)", len(groupUpdates)),
-				"",
-				"",
-				"",
-				"",
+				"", "", "", "",
 			})
-			
-			// Individual files in the group
 			for _, update := range groupUpdates {
-				displayName := update.TargetName
-				if update.ItemName != "" {
-					displayName = update.ItemName
-				}
-
 				t.AppendRow(table.Row{
-					"  ↳ " + displayName,
+					"  ↳ " + displayName(update),
 					update.TargetFile,
 					update.CurrentVersion,
 					"→",
@@ -173,15 +218,9 @@ func outputApplyPlan(groups []*PatchGroup) {
 			t.AppendSeparator()
 		}
 
-		// Display non-wildcard updates
 		for _, update := range nonWildcardUpdates {
-			displayName := update.TargetName
-			if update.ItemName != "" {
-				displayName = update.ItemName
-			}
-
 			t.AppendRow(table.Row{
-				displayName,
+				displayName(update),
 				update.TargetFile,
 				update.CurrentVersion,
 				"→",

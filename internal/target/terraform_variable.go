@@ -74,7 +74,7 @@ func (t *TerraformVariableTarget) ReadCurrentVersion() (string, error) {
 	//     default = "1.0.0"
 	//   }
 	pattern := fmt.Sprintf(
-		`variable\s+"%s"\s*\{[^}]*default\s*=\s*"([^"]+)"`,
+		`(?s)variable\s+"%s"\s*\{.*?default\s*=\s*"([^"]+)"`,
 		regexp.QuoteMeta(t.updateItem.TerraformVariableName),
 	)
 
@@ -108,7 +108,7 @@ func (t *TerraformVariableTarget) WriteVersion(version string) error {
 
 	// Pattern to match and replace the default value
 	pattern := fmt.Sprintf(
-		`(variable\s+"%s"\s*\{[^}]*default\s*=\s*")([^"]+)(")`,
+		`(?s)(variable\s+"%s"\s*\{.*?default\s*=\s*")([^"]+)(")`,
 		regexp.QuoteMeta(t.updateItem.TerraformVariableName),
 	)
 
@@ -144,7 +144,10 @@ func (t *TerraformVariableTarget) WriteVersion(version string) error {
 
 // GetTargetInfo returns metadata about this target
 func (t *TerraformVariableTarget) GetTargetInfo() *TargetInfo {
-	currentVersion, _ := t.ReadCurrentVersion()
+	currentVersion, err := t.ReadCurrentVersion()
+	if err != nil {
+		log.Warn().Err(err).Str("file", t.config.File).Str("variable", t.updateItem.TerraformVariableName).Msg("Failed to read current version for target info")
+	}
 	targetName := t.updateItem.Name
 	if targetName == "" {
 		targetName = t.config.Name

@@ -19,16 +19,10 @@ type CommitOptions struct {
 
 // PullRequestOptions represents options for creating a pull request
 type PullRequestOptions struct {
-	Title       string
-	Body        string
-	BaseBranch  string
-	HeadBranch  string
-	Labels      []string
-	PatchGroup  string
-}
-
-// FileChange represents a change to be committed
-type FileChange struct {
-	FilePath string
-	Content  string
+	Title      string
+	Body       string
+	BaseBranch string
+	HeadBranch string
+	Labels     []string
+	PatchGroup string
 }

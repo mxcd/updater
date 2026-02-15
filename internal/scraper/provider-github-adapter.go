@@ -17,10 +17,6 @@ func NewGitHubProviderClient(provider *configuration.PackageSourceProvider) Prov
 	}
 }
 
-func (a *GitHubProviderClientAdapter) NewClient(provider *configuration.PackageSourceProvider) (ProviderClient, error) {
-	return NewGitHubProviderClient(provider), nil
-}
-
 func (a *GitHubProviderClientAdapter) ScrapePackageSource(source *configuration.PackageSource, opts *ScrapeOptions) ([]*configuration.PackageSourceVersion, error) {
 	githubOpts := &github.ScrapeOptions{
 		Limit: opts.Limit,

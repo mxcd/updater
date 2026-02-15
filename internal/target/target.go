@@ -57,6 +57,8 @@ func (f *TargetFactory) CreateTargetForUpdateItem(target *configuration.Target, 
 		return NewTerraformVariableTargetForUpdateItem(target, updateItem)
 	case configuration.TargetTypeSubchart:
 		return NewSubchartTargetForUpdateItem(target, updateItem)
+	case configuration.TargetTypeYamlField:
+		return NewYamlFieldTargetForUpdateItem(target, updateItem)
 	default:
 		return nil, &UnsupportedTargetTypeError{Type: target.Type}
 	}

@@ -247,6 +247,8 @@ func TestIsValidTargetType(t *testing.T) {
 		expected   bool
 	}{
 		{TargetTypeTerraformVariable, true},
+		{TargetTypeSubchart, true},
+		{TargetTypeYamlField, true},
 		{TargetType("invalid"), false},
 		{TargetType(""), false},
 	}

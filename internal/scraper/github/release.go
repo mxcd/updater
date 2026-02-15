@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mxcd/updater/internal/configuration"
 	"github.com/rs/zerolog/log"
@@ -45,7 +45,7 @@ func scrapeRelease(provider *configuration.PackageSourceProvider, source *config
 	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
 	// Execute request
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	response, err := client.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch release: %w", err)
@@ -86,27 +86,8 @@ func scrapeRelease(provider *configuration.PackageSourceProvider, source *config
 		Version: releaseData.TagName,
 	}
 
-	// Try to parse semantic version (e.g., "v1.2.3" or "1.2.3")
-	versionString := strings.TrimPrefix(releaseData.TagName, "v")
-	versionParts := strings.Split(versionString, ".")
-
-	if len(versionParts) >= 1 {
-		if major, err := strconv.Atoi(versionParts[0]); err == nil {
-			version.MajorVersion = major
-		}
-	}
-	if len(versionParts) >= 2 {
-		if minor, err := strconv.Atoi(versionParts[1]); err == nil {
-			version.MinorVersion = minor
-		}
-	}
-	if len(versionParts) >= 3 {
-		// Handle patch versions that might have additional suffixes (e.g., "3-beta1")
-		patchPart := strings.Split(versionParts[2], "-")[0]
-		if patch, err := strconv.Atoi(patchPart); err == nil {
-			version.PatchVersion = patch
-		}
-	}
+	// Parse semantic version components
+	version.MajorVersion, version.MinorVersion, version.PatchVersion = configuration.ParseSemver(releaseData.TagName)
 
 	// Add version information if available
 	var infoItems []string

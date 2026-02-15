@@ -9,30 +9,52 @@ import (
 	"github.com/schollz/progressbar/v3"
 )
 
+// ScrapeError records a scraping failure for a single source
+type ScrapeError struct {
+	SourceName string
+	Provider   string
+	Err        error
+}
+
+func (e *ScrapeError) Error() string {
+	return fmt.Sprintf("source %s (provider %s): %v", e.SourceName, e.Provider, e.Err)
+}
+
+// ScrapeResult holds the outcome of a ScrapeAllSources call
+type ScrapeResult struct {
+	Succeeded int
+	Failed    int
+	Errors    []*ScrapeError
+}
+
+// HasErrors returns true if any sources failed to scrape
+func (r *ScrapeResult) HasErrors() bool {
+	return len(r.Errors) > 0
+}
+
 type Orchestrator struct {
 	config          *configuration.Config
 	providerClients map[string]ProviderClient
 }
 
 func NewOrchestrator(config *configuration.Config) (*Orchestrator, error) {
-	orchestrator := &Orchestrator{
+	o := &Orchestrator{
 		config:          config,
 		providerClients: make(map[string]ProviderClient),
 	}
 
-	// Initialize provider clients
 	for _, provider := range config.PackageSourceProviders {
-		client, err := orchestrator.createProviderClient(provider)
+		client, err := o.createProviderClient(provider)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create provider client for %s: %w", provider.Name, err)
 		}
-		orchestrator.providerClients[provider.Name] = client
+		o.providerClients[provider.Name] = client
 	}
 
-	return orchestrator, nil
+	return o, nil
 }
 
-func (orchestrator *Orchestrator) createProviderClient(provider *configuration.PackageSourceProvider) (ProviderClient, error) {
+func (o *Orchestrator) createProviderClient(provider *configuration.PackageSourceProvider) (ProviderClient, error) {
 	switch provider.Type {
 	case configuration.PackageSourceProviderTypeGitHub:
 		return NewGitHubProviderClient(provider), nil
@@ -45,10 +67,10 @@ func (orchestrator *Orchestrator) createProviderClient(provider *configuration.P
 	}
 }
 
-func (orchestrator *Orchestrator) ScrapeAllSources(options *ScrapeOptions) error {
-	log.Debug().Int("count", len(orchestrator.config.PackageSources)).Msg("Starting to scrape all package sources")
+func (o *Orchestrator) ScrapeAllSources(options *ScrapeOptions) *ScrapeResult {
+	log.Debug().Int("count", len(o.config.PackageSources)).Msg("Starting to scrape all package sources")
 
-	bar := progressbar.NewOptions(len(orchestrator.config.PackageSources),
+	bar := progressbar.NewOptions(len(o.config.PackageSources),
 		progressbar.OptionSetDescription("Scraping package sources:"),
 		progressbar.OptionSetItsString("pkg"),
 		progressbar.OptionShowIts(),
@@ -64,26 +86,42 @@ func (orchestrator *Orchestrator) ScrapeAllSources(options *ScrapeOptions) error
 		}),
 	)
 
-	for _, source := range orchestrator.config.PackageSources {
+	result := &ScrapeResult{}
+
+	for _, source := range o.config.PackageSources {
 		bar.Add(1)
-		if err := orchestrator.scrapeSource(source, options); err != nil {
+		if err := o.scrapeSource(source, options); err != nil {
 			log.Error().
 				Err(err).
 				Str("source", source.Name).
 				Str("provider", source.Provider).
 				Msg("Failed to scrape package source")
-			return fmt.Errorf("failed to scrape source %s: %w", source.Name, err)
+			result.Failed++
+			result.Errors = append(result.Errors, &ScrapeError{
+				SourceName: source.Name,
+				Provider:   source.Provider,
+				Err:        err,
+			})
+		} else {
+			result.Succeeded++
 		}
 	}
 
 	bar.Finish()
 	fmt.Printf("\n")
 
-	log.Debug().Msg("Successfully scraped all package sources")
-	return nil
+	if result.HasErrors() {
+		log.Warn().
+			Int("succeeded", result.Succeeded).
+			Int("failed", result.Failed).
+			Msg("Scraped package sources with errors")
+	} else {
+		log.Debug().Msg("Successfully scraped all package sources")
+	}
+	return result
 }
 
-func (orchestrator *Orchestrator) scrapeSource(source *configuration.PackageSource, options *ScrapeOptions) error {
+func (o *Orchestrator) scrapeSource(source *configuration.PackageSource, options *ScrapeOptions) error {
 	log.Debug().
 		Str("source", source.Name).
 		Str("provider", source.Provider).
@@ -92,7 +130,7 @@ func (orchestrator *Orchestrator) scrapeSource(source *configuration.PackageSour
 		Msg("Scraping package source")
 
 	// Get the provider client
-	client, exists := orchestrator.providerClients[source.Provider]
+	client, exists := o.providerClients[source.Provider]
 	if !exists {
 		return fmt.Errorf("provider %s not found", source.Provider)
 	}
@@ -114,6 +152,6 @@ func (orchestrator *Orchestrator) scrapeSource(source *configuration.PackageSour
 	return nil
 }
 
-func (orchestrator *Orchestrator) GetConfig() *configuration.Config {
-	return orchestrator.config
+func (o *Orchestrator) GetConfig() *configuration.Config {
+	return o.config
 }

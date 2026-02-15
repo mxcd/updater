@@ -17,10 +17,6 @@ func NewDockerProviderClient(provider *configuration.PackageSourceProvider) Prov
 	}
 }
 
-func (a *DockerProviderClientAdapter) NewClient(provider *configuration.PackageSourceProvider) (ProviderClient, error) {
-	return NewDockerProviderClient(provider), nil
-}
-
 func (a *DockerProviderClientAdapter) ScrapePackageSource(source *configuration.PackageSource, opts *ScrapeOptions) ([]*configuration.PackageSourceVersion, error) {
 	dockerOpts := &docker.ScrapeOptions{
 		Limit: opts.Limit,
